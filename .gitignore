@@ -1,0 +1,25 @@
+## Ignore Visual Studio cache and system files
+.vs/
+*.user
+*.suo
+
+## Ignore build outputs
+bin/
+obj/
+
+## Ignore packages
+packages/
+*.nupkg
+
+## Ignore logs
+*.log
+
+## Ignore user-specific files
+*.userprefs
+
+## Ignore publish artifacts
+*.pubxml
+*.publishproj
+
+## Ignore backup files
+*_backup*/
