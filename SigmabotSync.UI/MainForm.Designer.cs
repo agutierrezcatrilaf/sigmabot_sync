@@ -39,6 +39,8 @@
             this.PictureBox1 = new System.Windows.Forms.PictureBox();
             this.label3 = new System.Windows.Forms.Label();
             this.btnConfig = new System.Windows.Forms.Button();
+            this.progressBarSync = new System.Windows.Forms.ProgressBar();
+            this.lblStatusSync = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.PictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
@@ -98,7 +100,7 @@
             this.lblDestinationProject.BackColor = System.Drawing.Color.Tomato;
             this.lblDestinationProject.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lblDestinationProject.ForeColor = System.Drawing.Color.White;
-            this.lblDestinationProject.Location = new System.Drawing.Point(43, 178);
+            this.lblDestinationProject.Location = new System.Drawing.Point(43, 128);
             this.lblDestinationProject.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.lblDestinationProject.Name = "lblDestinationProject";
             this.lblDestinationProject.Size = new System.Drawing.Size(235, 31);
@@ -111,7 +113,7 @@
             this.cmbDestinationProject.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDestinationProject.FormattingEnabled = true;
             this.cmbDestinationProject.ItemHeight = 23;
-            this.cmbDestinationProject.Location = new System.Drawing.Point(277, 178);
+            this.cmbDestinationProject.Location = new System.Drawing.Point(277, 128);
             this.cmbDestinationProject.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.cmbDestinationProject.Name = "cmbDestinationProject";
             this.cmbDestinationProject.Size = new System.Drawing.Size(324, 31);
@@ -151,11 +153,29 @@
             this.btnConfig.UseVisualStyleBackColor = true;
             this.btnConfig.Click += new System.EventHandler(this.btnConfig_Click);
             // 
+            // progressBarSync
+            // 
+            this.progressBarSync.Location = new System.Drawing.Point(42, 197);
+            this.progressBarSync.Name = "progressBarSync";
+            this.progressBarSync.Size = new System.Drawing.Size(559, 23);
+            this.progressBarSync.TabIndex = 74;
+            // 
+            // lblStatusSync
+            // 
+            this.lblStatusSync.AutoSize = true;
+            this.lblStatusSync.Location = new System.Drawing.Point(42, 227);
+            this.lblStatusSync.Name = "lblStatusSync";
+            this.lblStatusSync.Size = new System.Drawing.Size(55, 23);
+            this.lblStatusSync.TabIndex = 75;
+            this.lblStatusSync.Text = "label4";
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 23F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(900, 647);
+            this.Controls.Add(this.lblStatusSync);
+            this.Controls.Add(this.progressBarSync);
             this.Controls.Add(this.btnConfig);
             this.Controls.Add(this.PictureBox1);
             this.Controls.Add(this.label3);
@@ -188,6 +208,8 @@
         internal System.Windows.Forms.PictureBox PictureBox1;
         internal System.Windows.Forms.Label label3;
         private System.Windows.Forms.Button btnConfig;
+        private System.Windows.Forms.ProgressBar progressBarSync;
+        private System.Windows.Forms.Label lblStatusSync;
     }
 }
 

@@ -43,6 +43,8 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\ProjectService.cs" />
+    <Compile Include="Synchronization\DocumentService.cs" />
+    <Compile Include="Synchronization\DocumentSyncWorker.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SigmabotSync.Domain\SigmabotSync.Domain.csproj">

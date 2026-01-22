@@ -45,6 +45,8 @@
     <Compile Include="Entities\Project.cs" />
     <Compile Include="Interfaces\IExternalApiClient.cs" />
     <Compile Include="Interfaces\IProjectService.cs" />
+    <Compile Include="Models\DocumentIntegrityInfo.cs" />
+    <Compile Include="Models\DocumentMetadata.cs" />
     <Compile Include="Models\UserInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
