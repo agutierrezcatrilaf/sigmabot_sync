@@ -1,4 +1,5 @@
-﻿using SigmabotSync.Application.Services;
+﻿using SigmabotSync.Application.Extraction;
+using SigmabotSync.Application.Services;
 using SigmabotSync.Application.Synchronization;
 using SigmabotSync.Domain.Entities;
 using SigmabotSync.Domain.Interfaces;
@@ -77,7 +78,7 @@ namespace SigmabotDataSync
             DateTime since = new DateTime(2025, 11, 25, 18, 0, 0);
 
             // Crear el worker
-            var worker = new DocumentSyncWorker(docService);
+            var worker = new SigmabotSync.Application.Synchronization.DocumentSyncWorker(docService);
 
             worker.OnProgress += UpdateProgress;
             worker.OnStatus += UpdateStatus;
@@ -94,6 +95,38 @@ namespace SigmabotDataSync
         {
            var configForm = new ConfigForm();
             configForm.ShowDialog();
+        }
+
+        // Método temporal para probar extracción de documentos
+        private async void btnTestExtraction_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                btnSync.Enabled = false;
+                lblStatusSync.Text = "Probando extracción...";
+
+                string projectId = cmbOriginProject.SelectedValue?.ToString();
+                if (string.IsNullOrEmpty(projectId))
+                {
+                    MessageBox.Show("Por favor selecciona un proyecto primero");
+                    btnSync.Enabled = true;
+                    return;
+                }
+
+                // PUNTO DE INTERRUPCIÓN AQUÍ - Pon un breakpoint en la siguiente línea
+                await DocumentExtractionWorkerTest.TestGetFirstPageQuickAsync(projectId);
+
+                MessageBox.Show("Prueba completada. Revisa la consola de salida y el archivo extraction_test.log");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error durante la prueba: {ex.Message}\n\n{ex.StackTrace}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnSync.Enabled = true;
+                lblStatusSync.Text = "Listo";
+            }
         }
 
         private void UpdateStatus(string msg)

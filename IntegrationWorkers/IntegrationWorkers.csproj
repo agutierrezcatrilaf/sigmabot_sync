@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{87F56D03-170C-4ACA-A321-394B791530AB}</ProjectGuid>
+    <ProjectGuid>{172C2D72-3B71-444F-9D7A-A078A3BED8CC}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>SigmabotSync.Domain</RootNamespace>
-    <AssemblyName>SigmabotSync.Domain</AssemblyName>
+    <RootNamespace>IntegrationWorkers</RootNamespace>
+    <AssemblyName>IntegrationWorkers</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -32,7 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -44,24 +44,27 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Config\AconexSettings.cs" />
-    <Compile Include="Config\ExtractionConfig.cs" />
-    <Compile Include="Entities\Project.cs" />
-    <Compile Include="Interfaces\IExternalApiClient.cs" />
-    <Compile Include="Interfaces\IProjectService.cs" />
-    <Compile Include="Models\DocumentIntegrityInfo.cs" />
-    <Compile Include="Models\DocumentMetadata.cs" />
-    <Compile Include="Models\Extraction\Area.cs" />
-    <Compile Include="Models\Extraction\DocumentSearchResult.cs" />
-    <Compile Include="Models\Extraction\Issue.cs" />
-    <Compile Include="Models\Extraction\MailModels.cs" />
-    <Compile Include="Models\Extraction\SystemCustomField.cs" />
-    <Compile Include="Models\Extraction\WorkflowModels.cs" />
-    <Compile Include="Models\UserInfo.cs" />
+    <Compile Include="Models\Issue.cs" />
+    <Compile Include="Models\Mail\ControlProcesoCorreos.cs" />
+    <Compile Include="Models\Area.cs" />
+    <Compile Include="Models\SystemCustomField.cs" />
+    <Compile Include="Models\Mail\MailsDto.cs" />
+    <Compile Include="Models\Workflow\MemProyFlujo.cs" />
+    <Compile Include="Models\Workflow\MemProyPaso.cs" />
+    <Compile Include="Models\Document\RootObject.cs" />
+    <Compile Include="Models\Document\SearchResult.cs" />
+    <Compile Include="Models\Workflow\MemProject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\DocumentSyncWorker.cs" />
+    <Compile Include="Services\IncidentWorker.cs" />
+    <Compile Include="Services\MailSyncWorker.cs" />
+    <Compile Include="Services\WorkflowSyncWorker.cs" />
+    <Compile Include="Shared\AppState.cs" />
+    <Compile Include="Shared\Utilities.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
