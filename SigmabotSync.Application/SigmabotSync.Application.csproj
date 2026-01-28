@@ -54,6 +54,8 @@
     <Compile Include="Extraction\IncidentExtractionWorker.cs" />
     <Compile Include="Extraction\MailExtractionWorker.cs" />
     <Compile Include="Extraction\WorkflowExtractionWorker.cs" />
+    <Compile Include="FileExtraction\FileExtractionWorker.cs" />
+    <Compile Include="FileExtraction\FileExtractionWorkerTest.cs" />
     <Compile Include="Services\ProjectService.cs" />
     <Compile Include="Synchronization\DocumentService.cs" />
     <Compile Include="Synchronization\DocumentSyncWorker.cs" />
