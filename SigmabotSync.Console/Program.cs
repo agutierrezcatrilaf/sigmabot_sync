@@ -1,3 +1,4 @@
+using SigmabotSync.Application.Extraction;
 using SigmabotSync.Application.FileExtraction;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Infrastructure.Services;
@@ -104,7 +105,26 @@ namespace SigmabotSync.Console
                 System.Console.WriteLine();
 
                 // PUNTO DE INTERRUPCIÓN AQUÍ - Pon un breakpoint en la siguiente línea
-                await worker.ProcessAllPagesAsync(bgw);
+                //await worker.ProcessAllPagesAsync(bgw);
+
+                // Tras descargar archivos, sincronizar metadata de documentos en BD (si hay ConnectionString o DbServer+DbDatabase)
+                var connectionString = extractionConfig.GetConnectionString();
+                if (!string.IsNullOrWhiteSpace(connectionString))
+                {
+                    System.Console.WriteLine();
+                    System.Console.WriteLine("Sincronizando metadata de documentos en base de datos...");
+
+                    var docConfig = ExtractionConfig.FromExtractionFilesConfig(extractionConfig);
+                    var docWorker = new DocumentSyncWorker(docConfig.ToDictionary(), connectionString);
+
+                    docWorker.Documentos(bgw, extractionConfig.ProjectId);
+
+                    System.Console.WriteLine("Sincronización de documentos completada.");
+                }
+                else
+                {
+                    System.Console.WriteLine("(ConnectionString vacío: no se ejecuta sincronización de documentos en BD)");
+                }
 
                 System.Console.WriteLine();
                 System.Console.WriteLine("=== Extracción completada exitosamente ===");

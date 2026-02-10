@@ -158,7 +158,8 @@ namespace SigmabotSync.Application.FileExtraction
         {
             try
             {
-                Utilities.Wlog($"FileExtraction: Procesando documento ID={document.Id}, DocNo={document.DocumentNumber}, Title={document.Title}, Version={document.VersionNumber}", 1);
+                var versionStr = document.GetDynamicValue("versionNumber") ?? "0";
+                Utilities.Wlog($"FileExtraction: Procesando documento ID={document.Id}, DocNo={document.DocumentNumber}, Title={document.Title}, Version={versionStr}", 1);
                 
                 // Descargar el archivo del documento
                 await DownloadDocumentFileAsync(document);
@@ -177,8 +178,8 @@ namespace SigmabotSync.Application.FileExtraction
             try
             {
                 string documentId = document.Id.ToString();
-                string version = document.VersionNumber.ToString();
-                string documentNumber = document.DocumentNumber.ToString();
+                string version = document.GetDynamicValue("versionNumber") ?? "0";
+                string documentNumber = document.DocumentNumber ?? "";
 
 
                 // Construir ruta de destino: origen/{projectID}/{documentID}/{version}/
@@ -213,10 +214,9 @@ namespace SigmabotSync.Application.FileExtraction
 
                     response.EnsureSuccessStatusCode();
 
-                    // Obtener nombre del archivo desde el documento o usar un nombre por defecto
-                    string fileName = !string.IsNullOrWhiteSpace(document.Filename) 
-                        ? document.Filename 
-                        : $"document_{documentId}_v{version}.pdf";
+                    // Obtener nombre del archivo desde el documento (dinámico) o usar un nombre por defecto
+                    string fileName = document.GetDynamicValue("filename");
+                    if (string.IsNullOrWhiteSpace(fileName)) fileName = $"document_{documentId}_v{version}.pdf";
 
                     // Limpiar nombre de archivo de caracteres inválidos
                     fileName = string.Join("_", fileName.Split(Path.GetInvalidFileNameChars()));

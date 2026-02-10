@@ -1,6 +1,8 @@
+using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Models.Extraction;
 using SigmabotSync.Application.Common;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -19,8 +21,18 @@ namespace SigmabotSync.Application.Extraction
 {
     public class DocumentSyncWorker
     {
+        /// <summary>Mappings por defecto cuando DocumentFieldMappings no está configurado.</summary>
+        private static readonly List<DocumentFieldMapping> DefaultFieldMappings = new List<DocumentFieldMapping>
+        {
+            new DocumentFieldMapping { ApiField = "docno", JsonProperty = "documentNumber", DbColumn = "DocumentNumber" },
+            new DocumentFieldMapping { ApiField = "title", JsonProperty = "title", DbColumn = "Title" },
+            new DocumentFieldMapping { ApiField = "revision", JsonProperty = "revision", DbColumn = "Revision" },
+            new DocumentFieldMapping { ApiField = "versionnumber", JsonProperty = "versionNumber", DbColumn = "VersionNumber" }
+        };
+
         private readonly Dictionary<string, string> _config;
         private readonly SqlConnection _dbConDocs;
+        private readonly List<DocumentFieldMapping> _fieldMappings;
 
         private DataTable DocumentosTmp;
         private DataTable Metadatatmp;
@@ -29,6 +41,23 @@ namespace SigmabotSync.Application.Extraction
         {
             _config = config;
             _dbConDocs = new SqlConnection(connectionString);
+            _fieldMappings = GetConfiguredFieldMappings(config);
+        }
+
+        /// <summary>Obtiene los mappings desde config (JSON). Si no hay o falla el parse, usa DefaultFieldMappings.</summary>
+        private static List<DocumentFieldMapping> GetConfiguredFieldMappings(Dictionary<string, string> config)
+        {
+            string raw;
+            if (config == null || !config.TryGetValue("DocumentFieldMappings", out raw) || string.IsNullOrWhiteSpace(raw))
+                return new List<DocumentFieldMapping>(DefaultFieldMappings);
+            try
+            {
+                var list = JsonConvert.DeserializeObject<List<DocumentFieldMapping>>(raw);
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+            catch { /* fallback a default */ }
+            return new List<DocumentFieldMapping>(DefaultFieldMappings);
         }
 
         public void Documentos(BackgroundWorker bgwdocs, string proyectID)
@@ -52,53 +81,18 @@ namespace SigmabotSync.Application.Extraction
 
             DocumentosTmp = new DataTable("Documentos_tmp");
 
-            // Columnas del nuevo esquema
-
+            // Siempre: Id, ACXProjectId, TrackingId (no entran por settings)
             DocumentosTmp.Columns.Add("Id", typeof(long));
             DocumentosTmp.Columns.Add("ACXProjectId", typeof(string));
             DocumentosTmp.Columns.Add("TrackingId", typeof(long));
-            DocumentosTmp.Columns.Add("DocumentNumber", typeof(string));
-            DocumentosTmp.Columns.Add("Title", typeof(string));
-            DocumentosTmp.Columns.Add("Revision", typeof(string));
-            DocumentosTmp.Columns.Add("AuthorisedBy", typeof(string));
-            DocumentosTmp.Columns.Add("DocumentType", typeof(string));
-            DocumentosTmp.Columns.Add("DocumentStatus", typeof(string));
-            DocumentosTmp.Columns.Add("Comments", typeof(string));
-            DocumentosTmp.Columns.Add("Discipline", typeof(string));
-            DocumentosTmp.Columns.Add("PrintSize", typeof(string));
-            DocumentosTmp.Columns.Add("DateForReview", typeof(string));
-            DocumentosTmp.Columns.Add("DateCreated", typeof(string));
-            DocumentosTmp.Columns.Add("Reference", typeof(string));
-            DocumentosTmp.Columns.Add("Author", typeof(string));
-            DocumentosTmp.Columns.Add("DateReviewed", typeof(string));
-            DocumentosTmp.Columns.Add("Scale", typeof(string));
-            DocumentosTmp.Columns.Add("ToClientDate", typeof(string));
-            DocumentosTmp.Columns.Add("Filename", typeof(string));
-            DocumentosTmp.Columns.Add("FileSize", typeof(long));
-            DocumentosTmp.Columns.Add("FileType", typeof(string));
-            DocumentosTmp.Columns.Add("Confidential", typeof(bool));
-            DocumentosTmp.Columns.Add("NoOfMarkups", typeof(int));
-            DocumentosTmp.Columns.Add("RevisionDate", typeof(string));
-            DocumentosTmp.Columns.Add("DateModified", typeof(string));
-            DocumentosTmp.Columns.Add("PlannedSubmissionDate", typeof(string));
-            DocumentosTmp.Columns.Add("MilestoneDate", typeof(string));
-            DocumentosTmp.Columns.Add("ReviewStatus", typeof(string));
-            DocumentosTmp.Columns.Add("ReviewSource", typeof(string));
-            DocumentosTmp.Columns.Add("MarkupLastModifiedDate", typeof(string));
-            DocumentosTmp.Columns.Add("ContractorDocumentNumber", typeof(string));
-            DocumentosTmp.Columns.Add("AsBuiltRequired", typeof(bool));
-            DocumentosTmp.Columns.Add("ContractDeliverable", typeof(bool));
-            DocumentosTmp.Columns.Add("Check1", typeof(bool));
-            DocumentosTmp.Columns.Add("Check2", typeof(bool));
-            DocumentosTmp.Columns.Add("Category", typeof(string));
-            DocumentosTmp.Columns.Add("Date1", typeof(string));
-            DocumentosTmp.Columns.Add("Date2", typeof(string));
-            DocumentosTmp.Columns.Add("VersionNumber", typeof(int));
-            DocumentosTmp.Columns.Add("SelectList1", typeof(string));
-            DocumentosTmp.Columns.Add("SelectList2", typeof(string));
-            DocumentosTmp.Columns.Add("SelectList3", typeof(string));
-            DocumentosTmp.Columns.Add("IsCurrent", typeof(bool));
-            DocumentosTmp.Columns.Add("ContractNumber", typeof(string));
+
+            // Columnas según DocumentFieldMappings (DbColumn), todas como string
+            foreach (var mapping in _fieldMappings)
+            {
+                if (string.IsNullOrWhiteSpace(mapping?.DbColumn)) continue;
+                if (!DocumentosTmp.Columns.Contains(mapping.DbColumn))
+                    DocumentosTmp.Columns.Add(mapping.DbColumn, typeof(string));
+            }
 
             if (_dbConDocs.State == ConnectionState.Closed)
                 _dbConDocs.Open();
@@ -212,27 +206,14 @@ namespace SigmabotSync.Application.Extraction
                         transaction.Commit();
                     }
 
-                    // Copy from tmp to final
+                    // Copy from tmp to final (columnas: Id, ACXProjectId, TrackingId + DbColumn de DocumentFieldMappings)
+                    var cols = DocumentosTmp.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
+                    var colList = string.Join(", ", cols);
                     transaction = _dbConDocs.BeginTransaction("CopiaDocumentos");
-                    using (SqlCommand sc = new SqlCommand(@"
-                    INSERT INTO [Documentos]
-                    (
-                        ACXProjectId, TrackingId, Id, DocumentNumber, Title, Revision, AuthorisedBy, DocumentType, 
-                        DocumentStatus, Comments, Discipline, PrintSize, DateForReview, DateCreated, Reference, 
-                        Author, DateReviewed, Scale, ToClientDate, Filename, FileSize, FileType, Confidential, 
-                        NoOfMarkups, RevisionDate, DateModified, PlannedSubmissionDate, MilestoneDate, ReviewStatus, 
-                        ReviewSource, MarkupLastModifiedDate, ContractorDocumentNumber, AsBuiltRequired, ContractDeliverable, 
-                        Check1, Check2, Category, Date1, Date2, VersionNumber, SelectList1, SelectList2, SelectList3, IsCurrent, ContractNumber
-                    )
-                    SELECT 
-                        ACXProjectId, TrackingId, Id, DocumentNumber, Title, Revision, AuthorisedBy, DocumentType, 
-                        DocumentStatus, Comments, Discipline, PrintSize, DateForReview, DateCreated, Reference, 
-                        Author, DateReviewed, Scale, ToClientDate, Filename, FileSize, FileType, Confidential, 
-                        NoOfMarkups, RevisionDate, DateModified, PlannedSubmissionDate, MilestoneDate, ReviewStatus, 
-                        ReviewSource, MarkupLastModifiedDate, ContractorDocumentNumber, AsBuiltRequired, ContractDeliverable, 
-                        Check1, Check2, Category, Date1, Date2, VersionNumber, SelectList1, SelectList2, SelectList3, IsCurrent, ContractNumber
-                    FROM Documentos_tmp
-                    ", _dbConDocs, transaction))
+                    var insertSql = string.Format(
+                        "INSERT INTO [Documentos] ({0}) SELECT {0} FROM Documentos_tmp",
+                        colList);
+                    using (SqlCommand sc = new SqlCommand(insertSql, _dbConDocs, transaction))
                     {
                         sc.ExecuteNonQuery();
                         transaction.Commit();
@@ -361,20 +342,14 @@ namespace SigmabotSync.Application.Extraction
 
         private async Task<Rootobject> GetPageAsync(HttpClient client, string uri, string projid, int page)
         {
-            string[] returnFields = {
-            "approved","asBuiltRequired","attribute1","attribute2","attribute3","attribute4",
-            "author","authorisedBy","category","check1","check2","comments","comments2",
-            "confidential","contractDeliverable","contractnumber","contractordocumentnumber",
-            "contractorrev","current","date1","date2","discipline","docno","doctype","filename",
-            "fileSize","fileType","forreview","markupLastModifiedDate","milestonedate",
-            "numberOfMarkups","packagenumber","percentComplete","plannedsubmissiondate",
-            "printSize","projectField1","projectField2","projectField3","received","reference",
-            "registered","reviewed","reviewSource","reviewstatus","revision","revisiondate",
-            "selectlist1","selectlist2","selectlist3","selectlist4","selectlist5","selectlist6",
-            "selectlist7","selectlist8","selectlist9","selectlist10","scale","statusid",
-            "tagNumber","title","toclient","trackingid","versionnumber","vdrcode",
-            "vendordocumentnumber","vendorrev","versionnumber"
-            };
+            // trackingid siempre; el resto según ApiField de los mappings
+            var returnFieldList = new List<string> { "trackingid" };
+            foreach (var m in _fieldMappings)
+            {
+                if (!string.IsNullOrWhiteSpace(m?.ApiField))
+                    returnFieldList.Add(m.ApiField);
+            }
+            string[] returnFields = returnFieldList.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
             string orgid = _config["OrgId"];
             string userId = _config["userid"];
@@ -410,61 +385,70 @@ namespace SigmabotSync.Application.Extraction
             try
             {
                 var row = DocumentosTmp.NewRow();
-
-                // Campos principales
                 row["Id"] = mdoc.Id;
                 row["ACXProjectId"] = projectId;
                 row["TrackingId"] = mdoc.TrackingId;
-                row["DocumentNumber"] = mdoc.DocumentNumber;
-                row["Title"] = mdoc.Title;
-                row["Revision"] = mdoc.Revision;
-                row["AuthorisedBy"] = mdoc.AuthorisedBy;
-                row["DocumentType"] = mdoc.DocumentType;
-                row["DocumentStatus"] = mdoc.DocumentStatus;
-                row["Comments"] = mdoc.Comments;
-                row["Discipline"] = mdoc.Discipline;
-                row["PrintSize"] = mdoc.PrintSize;
-                row["DateForReview"] = mdoc.DateForReview.ToString();
-                row["DateCreated"] = mdoc.DateCreated.ToString();
-                row["Reference"] = mdoc.Reference;
-                row["Author"] = mdoc.Author;
-                row["DateReviewed"] = mdoc.DateReviewed.ToString();
-                row["Scale"] = mdoc.Scale;
-                row["ToClientDate"] = mdoc.ToClientDate.ToString();
-                row["Filename"] = mdoc.Filename;
-                row["FileSize"] = Utilities.ParseLong(mdoc.FileSize);
-                row["FileType"] = mdoc.FileType;
-                row["Confidential"] = mdoc.Confidential;
-                row["NoOfMarkups"] = mdoc.NoOfMarkups;
-                row["RevisionDate"] = mdoc.RevisionDate.ToString();
-                row["DateModified"] = mdoc.DateModified.ToString();
-                row["PlannedSubmissionDate"] = mdoc.PlannedSubmissionDate.ToString();
-                row["MilestoneDate"] = mdoc.MilestoneDate.ToString();
-                row["ReviewStatus"] = mdoc.ReviewStatus;
-                row["ReviewSource"] = mdoc.ReviewSource;
-                row["MarkupLastModifiedDate"] = mdoc.MarkupLastModifiedDate.ToString();
-                row["ContractorDocumentNumber"] = mdoc.ContractorDocumentNumber;
-                //row["PackageNumber"] = JoinList(mdoc.PackageNumber);
-                row["AsBuiltRequired"] = mdoc.AsBuiltRequired;
-                row["ContractDeliverable"] = mdoc.ContractDeliverable;
-                row["Check1"] = mdoc.Check1;
-                row["Check2"] = mdoc.Check2;
-                row["Category"] = mdoc.Category;
-                row["Date1"] = mdoc.Date1.ToString();
-                row["Date2"] = mdoc.Date2.ToString();
-                row["VersionNumber"] = mdoc.VersionNumber;
-                row["SelectList1"] = mdoc.SelectList1;
-                row["SelectList2"] = mdoc.SelectList2;
-                row["SelectList3"] = mdoc.SelectList3;
-                row["IsCurrent"] = mdoc.IsCurrent;
-                row["ContractNumber"] = (mdoc.ContractNumber != null && mdoc.ContractNumber.Length > 0)
-                ? mdoc.ContractNumber[0] : "";
+
+                foreach (var mapping in _fieldMappings)
+                {
+                    if (mapping == null || string.IsNullOrWhiteSpace(mapping.DbColumn) || !DocumentosTmp.Columns.Contains(mapping.DbColumn))
+                        continue;
+                    object val = GetMappedValue(mapping, mdoc);
+                    if (val != null && val != DBNull.Value)
+                        row[mapping.DbColumn] = val;
+                }
                 DocumentosTmp.Rows.Add(row);
             }
             catch (Exception ex)
             {
                 Utilities.Wlog($"Documentos: ERROR {{AgregaDocumentoNuevo}}:{projectId}:{ex.Message}", 0);
             }
+        }
+
+        /// <summary>Obtiene el valor del documento según el mapping: propiedades directas, projectFields o ExtensionData.</summary>
+        private static object GetMappedValue(DocumentFieldMapping mapping, Searchresult mdoc)
+        {
+            if (mapping == null || mdoc == null) return DBNull.Value;
+
+            var jsonProp = mapping.JsonProperty ?? mapping.ApiField;
+            var apiField = mapping.ApiField ?? mapping.JsonProperty;
+            if (string.IsNullOrWhiteSpace(jsonProp)) return DBNull.Value;
+
+            // 1) Propiedades directas del modelo (documentNumber, title, revision, trackingid)
+            if (string.Equals(jsonProp, "documentNumber", StringComparison.OrdinalIgnoreCase))
+                return mdoc.DocumentNumber ?? (object)DBNull.Value;
+            if (string.Equals(jsonProp, "title", StringComparison.OrdinalIgnoreCase))
+                return mdoc.Title ?? (object)DBNull.Value;
+            if (string.Equals(jsonProp, "revision", StringComparison.OrdinalIgnoreCase))
+                return mdoc.Revision ?? (object)DBNull.Value;
+            if (string.Equals(jsonProp, "trackingid", StringComparison.OrdinalIgnoreCase))
+                return mdoc.TrackingId;
+
+            // 2) projectFields (campos custom del proyecto)
+            if (mdoc.ProjectFields != null)
+            {
+                var pf = mdoc.ProjectFields.FirstOrDefault(p =>
+                    string.Equals(p.Name, jsonProp, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.Name, apiField, StringComparison.OrdinalIgnoreCase));
+                if (pf != null && pf.Value != null)
+                    return pf.Value;
+            }
+
+            // 3) ExtensionData (resto de campos que vienen en el JSON)
+            var fromExt = GetValueFromExtensionData(mdoc, jsonProp) ?? GetValueFromExtensionData(mdoc, apiField);
+            return fromExt ?? (object)DBNull.Value;
+        }
+
+        private static object GetValueFromExtensionData(Searchresult mdoc, string key)
+        {
+            if (mdoc.ExtensionData == null || string.IsNullOrEmpty(key)) return null;
+            JToken token;
+            if (mdoc.ExtensionData.TryGetValue(key, out token) && token != null)
+            {
+                if (token is JValue jv) return jv.Value != null ? jv.Value.ToString() : (object)null;
+                return token.ToString();
+            }
+            return null;
         }
     }
 }

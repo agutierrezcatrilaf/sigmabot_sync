@@ -6,6 +6,42 @@
     "ProjectId": "1207993566",
     "OrgId": "1207961395",
     "UserId": "1208669376",
-    "BasePath": "C:\\Users\\Usuario\\AppData\\Local\\Temp\\SigmaBotFileExtractionSalfa\\"
+    "BasePath": "C:\\Users\\Usuario\\AppData\\Local\\Temp\\SigmaBotFileExtractionSalfa\\",
+	"ConnectionString": "",
+    "ProjectName": "Proyecto Salfa",
+    "DbServer": "155.254.24.155",
+    "DbDatabase": "sigmabot",
+    "DbUser": "sigmatecuser",
+    "DbPassword": "Galatea2025.",
+	"DocumentFieldMappings": [
+  { "ApiField": "docno",                  "JsonProperty": "documentNumber",   "DbColumn": "docno" },
+  { "ApiField": "revision",               "JsonProperty": "revision",         "DbColumn": "revision" },
+  { "ApiField": "title",                  "JsonProperty": "title",            "DbColumn": "title" },
+  { "ApiField": "doctype",                "JsonProperty": "documentType",     "DbColumn": "doctype" },
+  { "ApiField": "confidential",           "JsonProperty": "confidential",     "DbColumn": "confidential" },
+  { "ApiField": "revisiondate",           "JsonProperty": "revisionDate",     "DbColumn": "revisiondate" },
+  { "ApiField": "registered",             "JsonProperty": "dateModified",      "DbColumn": "registered" },
+  { "ApiField": "milestonedate",          "JsonProperty": "milestoneDate",    "DbColumn": "milestonedate" },
+  { "ApiField": "plannedsubmissiondate",  "JsonProperty": "plannedSubmissionDate","DbColumn": "plannedsubmissiondate" },
+  { "ApiField": "author",                 "JsonProperty": "author",           "DbColumn": "author" },
+  { "ApiField": "reviewstatus",           "JsonProperty": "reviewStatus",     "DbColumn": "reviewstatus" },
+  { "ApiField": "reviewsource",           "JsonProperty": "reviewSource",     "DbColumn": "reviewsource" },
+  { "ApiField": "comments",               "JsonProperty": "comments",         "DbColumn": "comments" },
+  { "ApiField": "versionnumber",          "JsonProperty": "versionNumber",    "DbColumn": "versionnumber" },
+  { "ApiField": "statusid",               "JsonProperty": "documentStatus",   "DbColumn": "statusid" },
+
+  { "ApiField": "Cma_singleSelect",       "JsonProperty": "Cma_singleSelect",       "DbColumn": "Cma_singleSelect" },
+  { "ApiField": "Cwa_singleSelect",       "JsonProperty": "Cwa_singleSelect",       "DbColumn": "Cwa_singleSelect" },
+  { "ApiField": "Cwp_singleSelect",       "JsonProperty": "Cwp_singleSelect",       "DbColumn": "Cwp_singleSelect" },
+  { "ApiField": "Description_multiLineText","JsonProperty": "Description_multiLineText","DbColumn": "Description_multiLineText" },
+  { "ApiField": "Discipline_singleSelect","JsonProperty": "Discipline_singleSelect","DbColumn": "Discipline_singleSelect" },
+  { "ApiField": "Ewp_singleSelect",       "JsonProperty": "Ewp_singleSelect",       "DbColumn": "Ewp_singleSelect" },
+  { "ApiField": "EstatusBim_singleSelect","JsonProperty": "EstatusBim_singleSelect","DbColumn": "EstatusBim_singleSelect" },
+  { "ApiField": "NDeDocumento2_singleLineText","JsonProperty": "NDeDocumento2_singleLineText","DbColumn": "NDeDocumento2_singleLineText" },
+  { "ApiField": "NDeDocumento3_singleLineText","JsonProperty": "NDeDocumento3_singleLineText","DbColumn": "NDeDocumento3_singleLineText" },
+  { "ApiField": "Pwp_singleSelect",       "JsonProperty": "Pwp_singleSelect",       "DbColumn": "Pwp_singleSelect" },
+  { "ApiField": "Proceso_singleSelect",   "JsonProperty": "Proceso_singleSelect",   "DbColumn": "Proceso_singleSelect" },
+  { "ApiField": "TipoDeDocumento_singleSelect","JsonProperty": "TipoDeDocumento_singleSelect","DbColumn": "TipoDeDocumento_singleSelect" }
+]
   }
 }

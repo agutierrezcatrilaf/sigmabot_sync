@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,12 +27,15 @@ namespace SigmabotSync.Domain.Config
         // Cadena de conexión a base de datos
         public string ConnectionString { get; set; }
 
+        /// <summary>Mapeo de campos documento (ApiField, JsonProperty, DbColumn). Si es null/empty el worker usa valores por defecto.</summary>
+        public List<DocumentFieldMapping> DocumentFieldMappings { get; set; }
+
         /// <summary>
         /// Convierte la configuración a Dictionary para compatibilidad con workers existentes
         /// </summary>
         public Dictionary<string, string> ToDictionary()
         {
-            return new Dictionary<string, string>
+            var d = new Dictionary<string, string>
             {
                 { "ACXUser", ACXUser ?? "" },
                 { "ACXPass", ACXPass ?? "" },
@@ -41,6 +45,9 @@ namespace SigmabotSync.Domain.Config
                 { "OrgId", OrgId ?? "" },
                 { "userid", userid ?? "" }
             };
+            if (DocumentFieldMappings != null && DocumentFieldMappings.Count > 0)
+                d["DocumentFieldMappings"] = JsonConvert.SerializeObject(DocumentFieldMappings);
+            return d;
         }
 
         /// <summary>
@@ -58,6 +65,28 @@ namespace SigmabotSync.Domain.Config
                 OrgId = "", // TODO: Obtener de BD
                 userid = "", // TODO: Obtener de BD
                 ConnectionString = connectionString
+            };
+        }
+
+        /// <summary>
+        /// Crea una configuración desde ExtractionFilesConfig (settings.json) para DocumentSyncWorker.
+        /// </summary>
+        public static ExtractionConfig FromExtractionFilesConfig(ExtractionFilesConfig extractionFiles)
+        {
+            if (extractionFiles == null)
+                throw new ArgumentNullException(nameof(extractionFiles));
+
+            return new ExtractionConfig
+            {
+                ACXUser = extractionFiles.UserAconex,
+                ACXPass = extractionFiles.PassAconex,
+                IntegrationIdAconex = extractionFiles.IntegrationIdAconex,
+                FieldIntegrationId = extractionFiles.IntegrationIdAconex,
+                NombrePrj = extractionFiles.ProjectName ?? "Proyecto",
+                OrgId = extractionFiles.OrgId ?? "",
+                userid = extractionFiles.UserId ?? "",
+                ConnectionString = extractionFiles.GetConnectionString(),
+                DocumentFieldMappings = extractionFiles.DocumentFieldMappings
             };
         }
     }
