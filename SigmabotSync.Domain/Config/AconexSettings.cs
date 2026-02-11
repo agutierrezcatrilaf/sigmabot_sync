@@ -19,9 +19,18 @@ namespace SigmabotSync.Domain.Config
 
     public class AconexSettings
     {
+        /// <summary>Conexión a la base de datos donde está la tabla Credenciales. Las credenciales Aconex y BD se leen desde esa tabla.</summary>
+        public string DatabaseConnectionString { get; set; }
+
+        [Obsolete("Las credenciales Aconex se obtienen de la tabla Credenciales (Tipo=Aconex). Se mantiene por compatibilidad.")]
         public string UserAconex { get; set; }
+        [Obsolete("Las credenciales Aconex se obtienen de la tabla Credenciales (Tipo=Aconex). Se mantiene por compatibilidad.")]
         public string PassAconex { get; set; }
+        [Obsolete("Las credenciales Aconex se obtienen de la tabla Credenciales (Tipo=Aconex). Se mantiene por compatibilidad.")]
         public string IntegrationIdAconex { get; set; }
+
+        /// <summary>Obsoleto: la configuración del trabajo (ProjectId, BasePath, campos, credenciales) se obtiene de TrabajosConfiguracion. Se mantiene por compatibilidad en tests.</summary>
+        [Obsolete("Usar TrabajosConfiguracion. Se mantiene por compatibilidad en tests.")]
         public ExtractionFilesConfig ExtractionFiles { get; set; }
     }
 

@@ -3,7 +3,6 @@ using SigmabotSync.Application.Common;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
@@ -31,7 +30,7 @@ namespace SigmabotSync.Application.Extraction
             _config = config;
             _dbConField = new SqlConnection(connectionString);
         }
-        public void ProcessIncidents(BackgroundWorker bgwF, string proyectID)
+        public void ProcessIncidents(string proyectID)
         {
             try
             {
@@ -40,7 +39,7 @@ namespace SigmabotSync.Application.Extraction
 
 
                 DatosActualesField();
-                GetFields(proyectID, bgwF);
+                GetFields(proyectID);
                 DbUpdateProjectData(proyectID);
             }
             catch (Exception ex)
@@ -104,7 +103,7 @@ namespace SigmabotSync.Application.Extraction
             }
         }
 
-        public void GetFields(string projId, BackgroundWorker bgwF)
+        public void GetFields(string projId)
         {
             // Descarga campos personalizados
             GetCustomFields(projId);
@@ -120,7 +119,7 @@ namespace SigmabotSync.Application.Extraction
             {
                 foreach (DataRow areaRow in Areastmp.Rows)
                 {
-                    GetIssues(projId, areaRow["AreaId"].ToString(), bgwF);
+                    GetIssues(projId, areaRow["AreaId"].ToString());
                 }
             }
         }
@@ -236,7 +235,7 @@ namespace SigmabotSync.Application.Extraction
             return Areastmp.Rows[0]["AreaId"].ToString();
         }
 
-        public void GetIssues(string projId, string rootId, BackgroundWorker bgwIssues)
+        public void GetIssues(string projId, string rootId)
         {
             try
             {
@@ -263,8 +262,6 @@ namespace SigmabotSync.Application.Extraction
                     foreach (var iss in rst.issues)
                     {
                         totChks++;
-                        bgwIssues.ReportProgress(totChks * 100 / rst.issues.Count, "Procesando Incidentes Area " + iss.area_sort_string);
-
                         AddIssue(projId, iss);
                     }
 

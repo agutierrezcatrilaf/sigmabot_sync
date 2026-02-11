@@ -5,7 +5,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.Diagnostics;
@@ -60,12 +59,12 @@ namespace SigmabotSync.Application.Extraction
             return new List<DocumentFieldMapping>(DefaultFieldMappings);
         }
 
-        public void Documentos(BackgroundWorker bgwdocs, string proyectID)
+        public void Documentos(string proyectID)
         {
             dbchecktmpTables();
             dbcleartmptables();
             datosactuales(proyectID);
-            GetACXDocumentsAsync(proyectID, bgwdocs)
+            GetACXDocumentsAsync(proyectID)
                 .GetAwaiter()
                 .GetResult();
             dbUpdateProjectData(proyectID);
@@ -145,7 +144,7 @@ namespace SigmabotSync.Application.Extraction
         }
 
 
-        private async Task GetACXDocumentsAsync(string projectID, BackgroundWorker bgwdocs)
+        private async Task GetACXDocumentsAsync(string projectID)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             var stopwatch = new System.Diagnostics.Stopwatch();
@@ -157,7 +156,7 @@ namespace SigmabotSync.Application.Extraction
 
                 Utilities.Wlog($"Inicio GetACXDocuments para {projectID}", 1);
                 stopwatch.Restart();
-                await GetDocumentsAllAsync(projectID, authcode, bgwdocs);
+                await GetDocumentsAllAsync(projectID, authcode);
                 stopwatch.Stop();
                 Utilities.Wlog($"[Documents] {DateTime.Now} Finaliz� GetACXDocuments para {projectID} en {stopwatch.Elapsed.Minutes:D2}:{stopwatch.Elapsed.Seconds:D2} (mm:ss)", 1);
             }
@@ -239,17 +238,21 @@ namespace SigmabotSync.Application.Extraction
 
         private readonly object _lockDocTmp = new object();
 
-        public async Task<bool> GetDocumentsAllAsync(string projid, string authcode, BackgroundWorker bgwdocs)
+        public async Task<bool> GetDocumentsAllAsync(string projid, string authcode)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
-            string uri = $"https://us1.aconex.com/api/projects/{projid}/register/search";
+            string baseUrl = _config.ContainsKey("AconexBaseUrl") && !string.IsNullOrWhiteSpace(_config["AconexBaseUrl"])
+                ? _config["AconexBaseUrl"].TrimEnd('/')
+                : "https://us1.aconex.com";
+            string integrationId = _config.ContainsKey("IntegrationIdAconex") ? (_config["IntegrationIdAconex"] ?? "") : "";
+            string uri = $"{baseUrl}/api/projects/{projid}/register/search";
 
             var client = new HttpClient();
             client.Timeout = TimeSpan.FromMinutes(10);
 
             // ?? Configuraci�n de headers (debe ir antes de la primera llamada)
             client.DefaultRequestHeaders.Add("Authorization", "Basic " + authcode);
-            client.DefaultRequestHeaders.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
+            //client.DefaultRequestHeaders.Add("X-Application-Key", integrationId);
 
             try
             {
@@ -265,9 +268,6 @@ namespace SigmabotSync.Application.Extraction
                 int totalPages = firstPage.totalNumberOfPages;
                 long allDocs = firstPage.totalResultsCount;
                 long processedDocs = 0;
-
-                bgwdocs.ReportProgress(0, $"Documentos: {allDocs} documentos en Aconex");
-                bgwdocs.ReportProgress(0, $"Documentos: {totalPages} p�ginas");
 
                 var semaphore = new SemaphoreSlim(5);
                 var tasks = new List<Task>();
@@ -307,10 +307,6 @@ namespace SigmabotSync.Application.Extraction
                                     }
                                 }
 
-                                bgwdocs.ReportProgress(
-                                    (int)(processedDocs * 100 / allDocs),
-                                    $"Procesando {allDocs} documentos"
-                                );
                             }
                         }
                         catch (Exception ex)

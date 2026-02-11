@@ -1,10 +1,9 @@
-﻿using IntegrationWorkers.Models;
+using IntegrationWorkers.Models;
 using IntegrationWorkers.Models.Document;
 using IntegrationWorkers.Shared;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
@@ -32,7 +31,7 @@ namespace IntegrationWorkers.Services
             _config = config;
             _dbConField = new SqlConnection(connectionString);
         }
-        public void ProcessIncidents(BackgroundWorker bgwF, string proyectID)
+        public void ProcessIncidents(string proyectID)
         {
             try
             {
@@ -41,7 +40,7 @@ namespace IntegrationWorkers.Services
 
 
                 DatosActualesField();
-                GetFields(proyectID, bgwF);
+                GetFields(proyectID);
                 DbUpdateProjectData(proyectID);
             }
             catch (Exception ex)
@@ -105,12 +104,9 @@ namespace IntegrationWorkers.Services
             }
         }
 
-        public void GetFields(string projId, BackgroundWorker bgwF)
+        public void GetFields(string projId)
         {
-            // Descarga campos personalizados
             GetCustomFields(projId);
-
-            // Descarga áreas y llena Areastmp
             GetAreas(projId);
 
             string ARoot = GetRoot(projId);
@@ -121,7 +117,7 @@ namespace IntegrationWorkers.Services
             {
                 foreach (DataRow areaRow in Areastmp.Rows)
                 {
-                    GetIssues(projId, areaRow["AreaId"].ToString(), bgwF);
+                    GetIssues(projId, areaRow["AreaId"].ToString());
                 }
             }
         }
@@ -237,7 +233,7 @@ namespace IntegrationWorkers.Services
             return Areastmp.Rows[0]["AreaId"].ToString();
         }
 
-        public void GetIssues(string projId, string rootId, BackgroundWorker bgwIssues)
+        public void GetIssues(string projId, string rootId)
         {
             try
             {
@@ -264,8 +260,6 @@ namespace IntegrationWorkers.Services
                     foreach (var iss in rst.issues)
                     {
                         totChks++;
-                        bgwIssues.ReportProgress(totChks * 100 / rst.issues.Count, "Procesando Incidentes Area " + iss.area_sort_string);
-
                         AddIssue(projId, iss);
                     }
 

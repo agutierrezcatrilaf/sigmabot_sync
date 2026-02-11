@@ -1,4 +1,4 @@
-﻿using IntegrationWorkers.Models;
+using IntegrationWorkers.Models;
 using IntegrationWorkers.Models.Document;
 using IntegrationWorkers.Models.Mail;
 using IntegrationWorkers.Shared;
@@ -53,7 +53,7 @@ namespace IntegrationWorkers.Services
             _dbConMails = new SqlConnection(connectionString);
         }
 
-        public void Correos(BackgroundWorker bgwc, string proyectID)
+        public void Correos(string proyectID)
         {
             DbCheckTmpTables();
             DatosActuales(proyectID);
@@ -61,8 +61,7 @@ namespace IntegrationWorkers.Services
             _mailIdsInbox = CargarMailIdsExistentesDeDB(proyectID, "inbox");
             _mailIdsSent = CargarMailIdsExistentesDeDB(proyectID, "sentbox");
 
-            // 1. Obtener todos los correos, destinatarios y adjuntos en los ConcurrentBag
-            GetTransmittalsOptimizedWithRetry(proyectID, bgwc);
+            GetTransmittalsOptimizedWithRetry(proyectID);
 
             // 2. Mapear los ConcurrentBag a DataTables
             MapBagsToDataTables();
@@ -378,7 +377,7 @@ namespace IntegrationWorkers.Services
         }
 
         // Método principal optimizado con reintento
-        void GetTransmittalsOptimizedWithRetry(string projid, BackgroundWorker bgwc)
+        void GetTransmittalsOptimizedWithRetry(string projid)
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             string authcode = Utilities.EncodeTexto(_config["ACXUser"] + ":" + _config["ACXPass"]);
@@ -399,15 +398,14 @@ namespace IntegrationWorkers.Services
 
                 for (long pagina = 1; pagina <= maxpages; pagina++)
                 {
-                    bool exito = ProcesarPagina(projid, authcode, mailbox, pagina, bgwc);
+                    bool exito = ProcesarPagina(projid, authcode, mailbox, pagina);
                     if (!exito) paginasFallidas.Add(pagina);
                 }
 
-                // Reintento de páginas fallidas
                 foreach (long pagina in paginasFallidas)
                 {
                     Utilities.Wlog($"[{mailbox.ToUpper()}] Reintentando página {pagina} para {projid}", 1);
-                    ProcesarPagina(projid, authcode, mailbox, pagina, bgwc);
+                    ProcesarPagina(projid, authcode, mailbox, pagina);
                 }
 
                 stopwatch.Stop();
@@ -417,7 +415,7 @@ namespace IntegrationWorkers.Services
         }
 
         // Procesa una página completa (correos + adjuntos) en paralelo
-        bool ProcesarPagina(string projid, string authcode, string mailbox, long pagina, BackgroundWorker bgwc)
+        bool ProcesarPagina(string projid, string authcode, string mailbox, long pagina)
         {
             try
             {
@@ -458,9 +456,6 @@ namespace IntegrationWorkers.Services
                                 tmails = (pagina - 1) * 300 + cuanta;
                                 progreso = totalResults > 0 ? (double)tmails / totalResults * 100 : 0;
                             }
-
-                            if (bgwc != null)
-                                bgwc.ReportProgress((int)progreso, $"Procesando {totalResults} Transmisiones {(mailbox == "inbox" ? "Recibidas" : "Enviadas")}");
 
                             // filtro duplicados antes de procesar
                             bool yaProcesado;

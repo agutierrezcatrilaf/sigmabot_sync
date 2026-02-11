@@ -2,7 +2,6 @@ using SigmabotSync.Application.Common;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Infrastructure.Services;
 using System;
-using System.ComponentModel;
 using System.Threading.Tasks;
 
 namespace SigmabotSync.Application.FileExtraction
@@ -63,25 +62,12 @@ namespace SigmabotSync.Application.FileExtraction
                 Console.WriteLine($"Estado: {status}");
             };
 
-            // Crear BackgroundWorker
-            var bgw = new BackgroundWorker
-            {
-                WorkerReportsProgress = true
-            };
-
-            bgw.ProgressChanged += (sender, e) =>
-            {
-                Console.WriteLine($"Progreso: {e.ProgressPercentage}% - {e.UserState}");
-            };
-
-            // PUNTO DE INTERRUPCIÓN AQUÍ - Pon un breakpoint en la siguiente línea
             Console.WriteLine($"Iniciando extracción de archivos para proyecto: {projectId}");
             Console.WriteLine($"OrgId: {orgId}, UserId: {userId}");
 
             try
             {
-                // Ejecutar el proceso
-                await worker.ProcessAllPagesAsync(bgw);
+                await worker.ProcessAllPagesAsync();
 
                 Console.WriteLine("Extracción de archivos completada.");
             }

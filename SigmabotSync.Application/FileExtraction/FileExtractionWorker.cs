@@ -4,10 +4,11 @@ using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Models.Extraction;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -32,16 +33,15 @@ namespace SigmabotSync.Application.FileExtraction
                 Timeout = TimeSpan.FromMinutes(10)
             };
 
-            // Configurar headers
+            // Mismo esquema que DocumentExtractionWorker (solo Authorization; sin X-Application-Key) para que el search no devuelva 401
             _httpClient.DefaultRequestHeaders.Add("Authorization", "Basic " + _config.AuthorizationHeader);
-            _httpClient.DefaultRequestHeaders.Add("X-Application-Key", _config.IntegrationId);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
         }
 
         /// <summary>
         /// Procesa todas las páginas de documentos
         /// </summary>
-        public async Task ProcessAllPagesAsync(BackgroundWorker bgw = null)
+        public async Task ProcessAllPagesAsync()
         {
             try
             {
@@ -94,10 +94,8 @@ namespace SigmabotSync.Application.FileExtraction
                         processedPages++;
                     }
 
-                    // Reportar progreso
                     int progress = (int)((page * 100) / totalPages);
                     OnProgress?.Invoke(page, totalPages);
-                    bgw?.ReportProgress(progress, $"Procesando página {page} de {totalPages} ({processedDocuments} documentos)");
                 }
 
                 OnStatus?.Invoke($"Proceso completado: {processedPages} páginas, {processedDocuments} documentos procesados");
@@ -115,7 +113,8 @@ namespace SigmabotSync.Application.FileExtraction
         /// </summary>
         private async Task<Rootobject> GetPageAsync(int pageNumber)
         {
-            string uri = $"https://us1.aconex.com/api/projects/{_config.ProjectId}/register/search";
+            string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
+            string uri = $"{baseUrl}/api/projects/{_config.ProjectId}/register/search";
 
             var requestBody = new
             {
@@ -194,17 +193,18 @@ namespace SigmabotSync.Application.FileExtraction
                 Directory.CreateDirectory(documentPath);
 
                 // Construir URL del endpoint
-                string downloadUrl = $"https://us1.aconex.com/api/projects/{_config.ProjectId}/register/{documentId}";
+                string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
+                string downloadUrl = $"{baseUrl}/api/projects/{_config.ProjectId}/register/{documentId}";
 
-                // Crear un HttpClient separado para la descarga (sin X-Application-Key)
-                // El endpoint de descarga no requiere ese header según el curl
-                using (var downloadClient = new HttpClient())
+                // Descarga con exactamente los mismos headers que el curl que funciona (solo Authorization + Accept-Encoding; sin X-Application-Key)
+                var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
+                using (var downloadClient = new HttpClient(handler))
                 {
                     downloadClient.Timeout = TimeSpan.FromMinutes(10);
-                    
-                    // Crear request para descargar
+
                     var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
-                    request.Headers.Add("Authorization", "Basic " + _config.AuthorizationHeader);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _config.AuthorizationHeader);
+                    request.Headers.Add("Accept-Encoding", "gzip, deflate, sdch");
 
                     // Ejecutar descarga con reintentos
                     var response = await Utilities.EjecutarConReintentosAsync(

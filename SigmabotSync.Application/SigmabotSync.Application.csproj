@@ -50,7 +50,6 @@
     <Compile Include="Common\AppState.cs" />
     <Compile Include="Common\Utilities.cs" />
     <Compile Include="Extraction\DocumentExtractionWorker.cs" />
-    <Compile Include="Extraction\DocumentExtractionWorkerTest.cs" />
     <Compile Include="Extraction\IncidentExtractionWorker.cs" />
     <Compile Include="Extraction\MailExtractionWorker.cs" />
     <Compile Include="Extraction\WorkflowExtractionWorker.cs" />

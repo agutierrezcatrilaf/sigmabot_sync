@@ -1,10 +1,9 @@
-﻿using IntegrationWorkers.Models;
+using IntegrationWorkers.Models;
 using IntegrationWorkers.Models.Document;
 using IntegrationWorkers.Shared;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.Diagnostics;
@@ -32,12 +31,12 @@ namespace IntegrationWorkers.Services
             _dbConDocs = new SqlConnection(connectionString);
         }
 
-        public void Documentos(BackgroundWorker bgwdocs, string proyectID)
+        public void Documentos(string proyectID)
         {
             dbchecktmpTables();
             dbcleartmptables();
             datosactuales(proyectID);
-            GetACXDocumentsAsync(proyectID, bgwdocs)
+            GetACXDocumentsAsync(proyectID)
                 .GetAwaiter()
                 .GetResult();
             dbUpdateProjectData(proyectID);
@@ -152,7 +151,7 @@ namespace IntegrationWorkers.Services
         }
 
 
-        private async Task GetACXDocumentsAsync(string projectID, BackgroundWorker bgwdocs)
+        private async Task GetACXDocumentsAsync(string projectID)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             var stopwatch = new System.Diagnostics.Stopwatch();
@@ -164,7 +163,7 @@ namespace IntegrationWorkers.Services
 
                 Utilities.Wlog($"Inicio GetACXDocuments para {projectID}", 1);
                 stopwatch.Restart();
-                await GetDocumentsAllAsync(projectID, authcode, bgwdocs);
+                await GetDocumentsAllAsync(projectID, authcode);
                 stopwatch.Stop();
                 Utilities.Wlog($"[Documents] {DateTime.Now} Finalizó GetACXDocuments para {projectID} en {stopwatch.Elapsed.Minutes:D2}:{stopwatch.Elapsed.Seconds:D2} (mm:ss)", 1);
             }
@@ -259,7 +258,7 @@ namespace IntegrationWorkers.Services
 
         private readonly object _lockDocTmp = new object();
 
-        public async Task<bool> GetDocumentsAllAsync(string projid, string authcode, BackgroundWorker bgwdocs)
+        public async Task<bool> GetDocumentsAllAsync(string projid, string authcode)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             string uri = $"https://us1.aconex.com/api/projects/{projid}/register/search";
@@ -327,10 +326,6 @@ namespace IntegrationWorkers.Services
                                     }
                                 }
 
-                                bgwdocs.ReportProgress(
-                                    (int)(processedDocs * 100 / allDocs),
-                                    $"Procesando {allDocs} documentos"
-                                );
                             }
                         }
                         catch (Exception ex)

@@ -1,10 +1,9 @@
-﻿using IntegrationWorkers.Models;
+using IntegrationWorkers.Models;
 using IntegrationWorkers.Models.Document;
 using IntegrationWorkers.Models.Workflow;
 using IntegrationWorkers.Shared;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.Diagnostics;
@@ -45,7 +44,7 @@ namespace IntegrationWorkers.Services
             _dbConWorkflow = new SqlConnection(connectionString);
         }
 
-        public void FlujosdeTrabajo(BackgroundWorker bgwF, string proyectID)
+        public void FlujosdeTrabajo(string proyectID)
         {
             try
             {
@@ -57,7 +56,7 @@ namespace IntegrationWorkers.Services
                 LoadProjectWorkflowsToMemory(proyectID);
                 LoadProjectWorkflowsStepsToMemory(proyectID);
                 DatosActuales(proyectID);
-                GetACXWorkflows(proyectID, bgwF);
+                GetACXWorkflows(proyectID);
                 DbUpdateProjectData(proyectID);
             }
             catch (Exception ex)
@@ -535,7 +534,7 @@ namespace IntegrationWorkers.Services
             }
         }
 
-        public void GetACXWorkflows(string projid, BackgroundWorker bgwf)
+        public void GetACXWorkflows(string projid)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             var stopwatch = new System.Diagnostics.Stopwatch();
@@ -563,10 +562,6 @@ namespace IntegrationWorkers.Services
                     {
                         paginas[pagina] = GetWorkflowByPage((int)pagina, projid, authcode);
 
-                        if (bgwf is BackgroundWorker worker)
-                        {
-                            worker.ReportProgress((int)(pagina * 100 / maxpages), $"Procesando {maxpages * 300} Flujos de Trabajo aproximados");
-                        }
                     }
 
                     long tmalas = 0;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using SigmabotSync.Domain.Entities;
 
 namespace SigmabotSync.Domain.Config
 {
@@ -11,6 +12,11 @@ namespace SigmabotSync.Domain.Config
     /// </summary>
     public class FileExtractionConfig
     {
+        /// <summary>
+        /// Base URL de la API Aconex (ej. https://us1.aconex.com). Se usa para construir las URLs de búsqueda y descarga.
+        /// </summary>
+        public string AconexBaseUrl { get; set; }
+
         /// <summary>
         /// ID del proyecto de Aconex
         /// </summary>
@@ -88,6 +94,7 @@ namespace SigmabotSync.Domain.Config
 
             return new FileExtractionConfig
             {
+                AconexBaseUrl = "https://us1.aconex.com",
                 ProjectId = projectId,
                 OrgId = orgId,
                 UserId = userId,
@@ -130,6 +137,7 @@ namespace SigmabotSync.Domain.Config
 
             return new FileExtractionConfig
             {
+                AconexBaseUrl = "https://us1.aconex.com",
                 ProjectId = extractionConfig.ProjectId,
                 OrgId = extractionConfig.OrgId,
                 UserId = extractionConfig.UserId,
@@ -138,6 +146,34 @@ namespace SigmabotSync.Domain.Config
                 BasePath = string.IsNullOrWhiteSpace(extractionConfig.BasePath) 
                     ? @"C:\Users\Usuario\AppData\Local\Temp\SigmaBotFileExtractionSalfa\" 
                     : extractionConfig.BasePath
+            };
+        }
+
+        /// <summary>
+        /// Crea la configuración desde un registro Credencial (Tipo = "Aconex"). ProjectId viene de settings; OrgId y UserId de la credencial.
+        /// </summary>
+        public static FileExtractionConfig FromCredencial(Credencial aconex, string projectId, string basePath = null)
+        {
+            if (aconex == null)
+                throw new ArgumentNullException(nameof(aconex));
+            if (string.IsNullOrWhiteSpace(aconex.Aconex_Usuario) || string.IsNullOrWhiteSpace(aconex.Aconex_Clave) || string.IsNullOrWhiteSpace(aconex.Aconex_IntegrationId))
+                throw new ArgumentException("La credencial Aconex debe tener Aconex_Usuario, Aconex_Clave y Aconex_IntegrationId");
+            if (string.IsNullOrWhiteSpace(projectId))
+                throw new ArgumentException("ProjectId es requerido");
+
+            string authHeader = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{aconex.Aconex_Usuario}:{aconex.Aconex_Clave}")
+            );
+
+            return new FileExtractionConfig
+            {
+                AconexBaseUrl = aconex.GetAconexBaseUrl(),
+                ProjectId = projectId,
+                OrgId = aconex.Aconex_OrganizationId ?? "",
+                UserId = aconex.Aconex_UserId ?? "",
+                AuthorizationHeader = authHeader,
+                IntegrationId = aconex.Aconex_IntegrationId,
+                BasePath = string.IsNullOrWhiteSpace(basePath) ? @"C:\Users\Usuario\AppData\Local\Temp\SigmaBotFileExtractionSalfa\" : basePath
             };
         }
     }
