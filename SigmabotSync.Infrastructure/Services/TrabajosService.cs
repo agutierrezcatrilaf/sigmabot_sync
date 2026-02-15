@@ -1,10 +1,13 @@
 using System;
+using System.Data;
 using System.Data.SqlClient;
+using SigmabotSync.Domain.Entities;
+using SigmabotSync.Infrastructure.Data;
 
 namespace SigmabotSync.Infrastructure.Services
 {
     /// <summary>
-    /// Actualiza el estado y resultado de ejecución en la tabla Trabajos.
+    /// Operaciones sobre la tabla Trabajos y su configuración (TrabajosConfiguracion).
     /// </summary>
     public class TrabajosService
     {
@@ -24,20 +27,15 @@ namespace SigmabotSync.Infrastructure.Services
         /// <param name="mensajeError">Mensaje de error o detalle cuando exito es false (se guarda en UltCorrEjecucion).</param>
         public void ActualizarResultadoEjecucion(int idTrabajo, bool exito, string mensajeError = null)
         {
-            var ahora = DateTime.Now;
-            var fecha = ahora.Date;
-            var hora = ahora.ToString("HH:mm:ss");
+            var fechaHoraUltimaEjecucion = DateTime.Now;
             var resultado = exito ? "Exitoso" : "Error";
-            var estado = exito ? "Completado" : "Error";
             var ultCorr = exito ? (string)null : (mensajeError ?? "Error en la ejecución");
 
             const string sql = @"
                 UPDATE [Trabajos]
                 SET
                     FechaUltimaEjecucion = @FechaUltimaEjecucion,
-                    HoraUltimaEjecucion = @HoraUltimaEjecucion,
                     ResultadoUltimaEjecucion = @ResultadoUltimaEjecucion,
-                    Estado = @Estado,
                     UltCorrEjecucion = @UltCorrEjecucion
                 WHERE id = @Id";
 
@@ -47,12 +45,83 @@ namespace SigmabotSync.Infrastructure.Services
                 using (var cmd = new SqlCommand(sql, cn))
                 {
                     cmd.Parameters.AddWithValue("@Id", idTrabajo);
-                    cmd.Parameters.AddWithValue("@FechaUltimaEjecucion", fecha);
-                    cmd.Parameters.AddWithValue("@HoraUltimaEjecucion", hora);
+                    cmd.Parameters.AddWithValue("@FechaUltimaEjecucion", fechaHoraUltimaEjecucion);
                     cmd.Parameters.AddWithValue("@ResultadoUltimaEjecucion", resultado);
-                    cmd.Parameters.AddWithValue("@Estado", estado);
                     cmd.Parameters.AddWithValue("@UltCorrEjecucion", (object)ultCorr ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Obtiene la configuración del trabajo por IdTrabajo desde TrabajosConfiguracion.
+        /// Solo considera trabajos cuyo Estado = 'Activo' en la tabla Trabajos.
+        /// Devuelve null si no hay filas para el trabajo, si el trabajo no está Activo o si falta IdProyecto.
+        /// </summary>
+        public TrabajoConfiguracion GetConfiguracionByIdTrabajo(int idTrabajo)
+        {
+            const string sql = @"
+                SELECT tc.idTrabajo, tc.Nombre, tc.ValorTexto
+                FROM [TrabajosConfiguracion] tc
+                INNER JOIN [Trabajos] t ON t.id = tc.idTrabajo
+                WHERE tc.idTrabajo = @IdTrabajo
+                  AND t.Estado = 'Activo'";
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    using (var adapter = new SqlDataAdapter(cmd))
+                    {
+                        var dt = new DataTable();
+                        adapter.Fill(dt);
+                        if (dt.Rows.Count == 0)
+                            return null;
+
+                        var result = new TrabajoConfiguracion { IdTrabajo = idTrabajo };
+                        foreach (DataRow row in dt.Rows)
+                        {
+                            var nombre = (row["Nombre"] as string)?.Trim();
+                            var valor = (row["ValorTexto"] as string)?.Trim();
+                            if (string.IsNullOrEmpty(nombre)) continue;
+
+                            switch (nombre)
+                            {
+                                case "Proyecto":
+                                    result.Proyecto = valor;
+                                    break;
+                                case "IdProyecto":
+                                    result.IdProyecto = valor;
+                                    break;
+                                case "CamposConsulta":
+                                    result.CamposConsulta = valor;
+                                    break;
+                                case "CamposResponse":
+                                    result.CamposResponse = valor;
+                                    break;
+                                case "CamposBD":
+                                    result.CamposBD = valor;
+                                    break;
+                                case "BasePath":
+                                    result.BasePath = valor;
+                                    break;
+                                case "CredencialAconex":
+                                    if (int.TryParse(valor, out int idAconex))
+                                        result.CredencialAconexId = idAconex;
+                                    break;
+                                case "CredencialBD":
+                                    if (int.TryParse(valor, out int idBd))
+                                        result.CredencialBDId = idBd;
+                                    break;
+                            }
+                        }
+
+                        if (string.IsNullOrWhiteSpace(result.IdProyecto))
+                            return null;
+                        return result;
+                    }
                 }
             }
         }

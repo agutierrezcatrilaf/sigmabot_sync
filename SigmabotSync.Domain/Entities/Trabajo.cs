@@ -12,11 +12,10 @@ namespace SigmabotSync.Domain.Entities
         public string Tipo { get; set; }
         /// <summary>Periodicidad del trabajo (nombre de columna en BD: Perioricidad).</summary>
         public string Perioricidad { get; set; }
+        /// <summary>Fecha y hora de la última ejecución (datetime).</summary>
         public DateTime? FechaUltimaEjecucion { get; set; }
-        /// <summary>Hora de la última ejecución (ej. "14:30:00").</summary>
-        public string HoraUltimaEjecucion { get; set; }
+        /// <summary>Fecha y hora de la próxima ejecución programada (datetime).</summary>
         public DateTime? FechaProximaEjecucion { get; set; }
-        public string HoraProximaEjecucion { get; set; }
         /// <summary>Resultado de la última ejecución: "Exitoso", "Error", etc.</summary>
         public string ResultadoUltimaEjecucion { get; set; }
         public string ControldeEjecucion { get; set; }

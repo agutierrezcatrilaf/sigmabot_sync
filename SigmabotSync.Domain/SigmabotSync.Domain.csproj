@@ -51,6 +51,8 @@
     <Compile Include="Entities\Project.cs" />
     <Compile Include="Entities\Trabajo.cs" />
     <Compile Include="Entities\TrabajoConfiguracion.cs" />
+    <Compile Include="Entities\TrabajoEjecucion.cs" />
+    <Compile Include="Entities\TrabajoProgramacion.cs" />
     <Compile Include="Interfaces\IExternalApiClient.cs" />
     <Compile Include="Interfaces\IProjectService.cs" />
     <Compile Include="Models\DocumentIntegrityInfo.cs" />

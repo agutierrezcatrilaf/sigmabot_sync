@@ -55,7 +55,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\CredencialesService.cs" />
     <Compile Include="Services\TrabajosService.cs" />
-    <Compile Include="Services\TrabajosConfiguracionService.cs" />
+    <Compile Include="Services\TrabajosEjecucionService.cs" />
+    <Compile Include="Services\TrabajosProgramacionService.cs" />
     <Compile Include="Services\SettingsService.cs" />
   </ItemGroup>
   <ItemGroup>
