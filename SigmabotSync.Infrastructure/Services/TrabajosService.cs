@@ -61,7 +61,7 @@ namespace SigmabotSync.Infrastructure.Services
         public TrabajoConfiguracion GetConfiguracionByIdTrabajo(int idTrabajo)
         {
             const string sql = @"
-                SELECT tc.idTrabajo, tc.Nombre, tc.ValorTexto
+                SELECT tc.idTrabajo, tc.Nombre, tc.ValorTexto, t.Tipo
                 FROM [TrabajosConfiguracion] tc
                 INNER JOIN [Trabajos] t ON t.id = tc.idTrabajo
                 WHERE tc.idTrabajo = @IdTrabajo
@@ -81,6 +81,8 @@ namespace SigmabotSync.Infrastructure.Services
                             return null;
 
                         var result = new TrabajoConfiguracion { IdTrabajo = idTrabajo };
+                        // Tipo de trabajo desde la tabla Trabajos (campo Tipo)
+                        result.TipoTrabajo = (dt.Rows[0]["Tipo"] as string)?.Trim();
                         foreach (DataRow row in dt.Rows)
                         {
                             var nombre = (row["Nombre"] as string)?.Trim();

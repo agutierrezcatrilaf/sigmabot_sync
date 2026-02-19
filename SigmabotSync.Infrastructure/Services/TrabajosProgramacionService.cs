@@ -22,15 +22,17 @@ namespace SigmabotSync.Infrastructure.Services
         /// <summary>
         /// Obtiene los IdTrabajo que están programados para ejecutarse "ahora" (mismo día de la semana, hora ya pasada o actual),
         /// están activos, el trabajo está Activo en Trabajos, y no se ha ejecutado ya hoy para esa programación
-        /// (evita repetir: si debía ejecutarse a las 12 y ya se ejecutó, no se vuelve a incluir).
+        /// (evita repetir: si debía ejecutarse a las 01:30 y ya se ejecutó a las 01:34, no se vuelve a incluir).
+        /// Usa la fecha de <paramref name="ahora"/> para detectar "ya ejecutado hoy", no GETDATE(), para evitar desfases por zona horaria.
         /// </summary>
         /// <param name="ahora">Fecha/hora de referencia (normalmente DateTime.Now).</param>
         /// <returns>Lista de IdTrabajo únicos a ejecutar.</returns>
         public IReadOnlyList<int> ObtenerTrabajosPendientesDeEjecucion(DateTime ahora)
         {
-            // En SQL Server con DATEFIRST 7: 1=Dom, 2=Lun,..., 7=Sab. Restamos 1 para 0=Dom como en .NET DayOfWeek.
+            // En .NET DayOfWeek: 0=Dom, 1=Lun, ..., 6=Sab. TrabajosProgramacion usa el mismo esquema.
             int diaSemana = (int)ahora.DayOfWeek;
             var horaActual = ahora.TimeOfDay;
+            var fechaReferencia = ahora.Date;
 
             const string sql = @"
                 SELECT DISTINCT tp.IdTrabajo
@@ -42,7 +44,7 @@ namespace SigmabotSync.Infrastructure.Services
                   AND NOT EXISTS (
                       SELECT 1 FROM [dbo].[TrabajosEjecucion] e
                       WHERE e.IdTrabajo = tp.IdTrabajo
-                        AND CAST(e.FechaHoraInicio AS DATE) = CAST(GETDATE() AS DATE)
+                        AND CAST(e.FechaHoraInicio AS DATE) = @FechaReferencia
                         AND CAST(e.FechaHoraInicio AS TIME) >= tp.Hora
                   )";
 
@@ -54,6 +56,7 @@ namespace SigmabotSync.Infrastructure.Services
                 {
                     cmd.Parameters.AddWithValue("@DiaSemana", diaSemana);
                     cmd.Parameters.Add("@HoraActual", SqlDbType.Time).Value = horaActual;
+                    cmd.Parameters.Add("@FechaReferencia", SqlDbType.Date).Value = fechaReferencia;
 
                     using (var rdr = cmd.ExecuteReader())
                     {

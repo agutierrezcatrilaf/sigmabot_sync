@@ -1,7 +1,9 @@
 using SigmabotSync.Application.Extraction;
 using SigmabotSync.Application.FileExtraction;
+using SigmabotSync.Application.Synchronization;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Infrastructure.External;
 using SigmabotSync.Infrastructure.Services;
 using System;
 using System.Collections.Generic;
@@ -9,8 +11,26 @@ using System.Threading.Tasks;
 
 namespace SigmabotSync.Console
 {
+    /// <summary>Tipos de trabajo soportados (valor en TrabajosConfiguracion TipoTrabajo).</summary>
+    internal static class TipoTrabajoConst
+    {
+        public const string FileExtraction = "FileExtraction";
+        public const string ProjectSync = "ProjectSync";
+        public const string FullExtraction = "FullExtraction";
+    }
+
     class Program
     {
+        /// <summary>
+        /// Al depurar: pon aquí el Id del trabajo a ejecutar (ej. 1) y al dar F5 se ejecutará solo ese trabajo.
+        /// Pon null para usar argumentos de línea de comandos o el scheduler.
+        /// </summary>
+#if DEBUG
+        private static readonly int? DebugIdTrabajo = 3;
+#else
+        private static readonly int? DebugIdTrabajo = null;
+#endif
+
         static async Task Main(string[] args)
         {
             System.Console.WriteLine("=== SigmaBot File Extraction Console ===");
@@ -20,12 +40,22 @@ namespace SigmabotSync.Console
             if (connectionString == null)
                 return;
 
-            int? idManual = ObtenerIdTrabajoManual(args);
-            if (idManual.HasValue)
+            // Al debuggear: si DebugIdTrabajo está definido, ejecutar solo ese trabajo (ignora args)
+            if (DebugIdTrabajo.HasValue)
             {
-                System.Console.WriteLine("Modo manual: ejecutando trabajo Id=" + idManual.Value);
+                System.Console.WriteLine("[Debug] Ejecutando trabajo Id=" + DebugIdTrabajo.Value + " (DebugIdTrabajo en código)");
                 System.Console.WriteLine();
-                await EjecutarUnTrabajoAsync(connectionString, idManual.Value, "Manual");
+                await EjecutarUnTrabajoAsync(connectionString, DebugIdTrabajo.Value, "Local");
+                return;
+            }
+
+            // Modo local: --local <id> o -l <id> (para desarrollo; ejecuta solo ese trabajo)
+            var (idLocal, esLocal) = ObtenerIdTrabajoLocal(args);
+            if (idLocal.HasValue)
+            {
+                System.Console.WriteLine(esLocal ? "Modo local: ejecutando trabajo Id=" + idLocal.Value : "Modo manual: ejecutando trabajo Id=" + idLocal.Value);
+                System.Console.WriteLine();
+                await EjecutarUnTrabajoAsync(connectionString, idLocal.Value, esLocal ? "Local" : "Manual");
                 return;
             }
 
@@ -44,31 +74,39 @@ namespace SigmabotSync.Console
             }
             else
             {
-                System.Console.WriteLine("No hay trabajos pendientes para el scheduler. Para ejecutar un trabajo manualmente use: SigmabotSync.Console.exe --manual <IdTrabajo>");
+                System.Console.WriteLine("No hay trabajos pendientes. Para ejecutar un trabajo en local: SigmabotSync.Console.exe --local <IdTrabajo> (o -l <IdTrabajo>). Manual: --manual <IdTrabajo> o solo <IdTrabajo>.");
             }
         }
 
         /// <summary>
-        /// Parsea los argumentos y devuelve el IdTrabajo si se solicitó ejecución manual.
-        /// Formas: --manual 2, -m 2, o solo 2 (un único número).
+        /// Parsea los argumentos y devuelve el IdTrabajo si se solicitó ejecución manual o local.
+        /// Formas: --local 2, -l 2 (modo local), --manual 2, -m 2, o solo 2 (un único número).
+        /// En local se registra como tipo ejecución "Local" en el historial.
         /// </summary>
-        static int? ObtenerIdTrabajoManual(string[] args)
+        /// <returns>Tupla (idTrabajo, esLocal). esLocal true solo para --local/-l.</returns>
+        static (int? id, bool esLocal) ObtenerIdTrabajoLocal(string[] args)
         {
             if (args == null || args.Length == 0)
-                return null;
+                return (null, false);
             for (int i = 0; i < args.Length; i++)
             {
                 var arg = (args[i] ?? "").Trim();
+                if (arg == "--local" || arg == "-l")
+                {
+                    if (i + 1 < args.Length && int.TryParse(args[i + 1].Trim(), out int id) && id > 0)
+                        return (id, true);
+                    return (null, false);
+                }
                 if (arg == "--manual" || arg == "-m")
                 {
                     if (i + 1 < args.Length && int.TryParse(args[i + 1].Trim(), out int id) && id > 0)
-                        return id;
-                    return null;
+                        return (id, false);
+                    return (null, false);
                 }
                 if (args.Length == 1 && int.TryParse(arg, out int idUnico) && idUnico > 0)
-                    return idUnico;
+                    return (idUnico, false);
             }
-            return null;
+            return (null, false);
         }
 
         /// <summary>
@@ -94,8 +132,37 @@ namespace SigmabotSync.Console
 
                 fechaInicioEjecucion = DateTime.Now;
 
-                await EjecutarExtraccionArchivosAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
-                SincronizarMetadataDocumentos(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
+                bool tipoValido = tipoTrabajo == TipoTrabajoConst.FileExtraction
+                    || tipoTrabajo == TipoTrabajoConst.ProjectSync
+                    || tipoTrabajo == TipoTrabajoConst.FullExtraction;
+
+                if (!tipoValido)
+                {
+                    mensajeError = string.IsNullOrEmpty(tipoTrabajo)
+                        ? "Tipo de trabajo no configurado (campo Tipo en tabla Trabajos). Use: FileExtraction, ProjectSync o FullExtraction."
+                        : "Tipo de trabajo no reconocido: " + tipoTrabajo + ". Use: FileExtraction, ProjectSync o FullExtraction.";
+                    System.Console.WriteLine("No se ejecuta: " + mensajeError);
+                    GuardarResultadoTrabajo(connectionString, idTrabajo, exito: false, mensajeError);
+                    return;
+                }
+
+                System.Console.WriteLine("Tipo de trabajo: " + tipoTrabajo);
+                System.Console.WriteLine();
+
+                switch (tipoTrabajo)
+                {
+                    case TipoTrabajoConst.FileExtraction:
+                        await EjecutarExtraccionArchivosAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                        SincronizarMetadataDocumentos(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                        break;
+                    case TipoTrabajoConst.ProjectSync:
+                        await EjecutarProjectSyncAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                        break;
+                    case TipoTrabajoConst.FullExtraction:
+                        await EjecutarFullExtractionAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                        break;
+                }
 
                 System.Console.WriteLine("=== Extracción completada exitosamente (IdTrabajo=" + idTrabajo + ") ===");
                 exito = true;
@@ -279,7 +346,7 @@ namespace SigmabotSync.Console
                     documentFieldMappings
                 );
 
-                var docWorker = new DocumentSyncWorker(docConfig.ToDictionary(), connectionStringDocs);
+                var docWorker = new DocumentExtractionWorker(docConfig.ToDictionary(), connectionStringDocs);
                 docWorker.Documentos(projectId);
 
                 System.Console.WriteLine("Sincronización de documentos completada.");
@@ -289,6 +356,92 @@ namespace SigmabotSync.Console
             {
                 System.Console.WriteLine("(Credencial BD sin Servidor/BaseDatos: no se ejecuta sincronización de documentos)");
             }
+        }
+
+        /// <summary>
+        /// Ejecuta ProjectSync: sincronización de documentos modificados (RunAsync de DocumentSyncWorker en Synchronization).
+        /// </summary>
+        private static async Task EjecutarProjectSyncAsync(
+            TrabajoConfiguracion trabajoConfig,
+            Credencial credAconex,
+            Credencial credBd,
+            List<string> etapasEjecutadas)
+        {
+            string projectId = trabajoConfig.IdProyecto ?? string.Empty;
+            // Sincronizar documentos modificados desde hace 1 día (se puede parametrizar después en TrabajosConfiguracion)
+            DateTime since = DateTime.UtcNow.AddDays(-1);
+
+            System.Console.WriteLine("Configuración ProjectSync (IdTrabajo=" + trabajoConfig.IdTrabajo + "):");
+            System.Console.WriteLine($"  IdProyecto={projectId}, Since={since:yyyy-MM-dd HH:mm:ss} UTC");
+            System.Console.WriteLine();
+
+            var client = new AconexDocumentClient(
+                credAconex.Aconex_Usuario ?? "",
+                credAconex.Aconex_Clave ?? "",
+                credAconex.Aconex_IntegrationId ?? "");
+            var documentService = new DocumentService(client);
+            var syncWorker = new DocumentSyncWorker(documentService);
+
+            syncWorker.OnProgress += (current, total) =>
+            {
+                System.Console.WriteLine($"[Progreso] Documento {current} de {total}");
+            };
+            syncWorker.OnStatus += (status) =>
+            {
+                System.Console.WriteLine($"[Estado] {status}");
+            };
+
+            await syncWorker.RunAsync(projectId, since);
+            etapasEjecutadas.Add("ProjectSync");
+        }
+
+        /// <summary>
+        /// Ejecuta FullExtraction: Documentos, ProcessIncidents, Correos y FlujosdeTrabajo (workers de Extraction).
+        /// </summary>
+        private static async Task EjecutarFullExtractionAsync(
+            TrabajoConfiguracion trabajoConfig,
+            Credencial credAconex,
+            Credencial credBd,
+            List<string> etapasEjecutadas)
+        {
+            string projectId = trabajoConfig.IdProyecto ?? string.Empty;
+            string projectName = !string.IsNullOrWhiteSpace(trabajoConfig.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
+            var documentFieldMappings = trabajoConfig.ToDocumentFieldMappings();
+            var connectionStringDocs = credBd.GetConnectionString();
+
+            if (string.IsNullOrWhiteSpace(connectionStringDocs))
+            {
+                throw new InvalidOperationException("FullExtraction requiere credencial BD con Servidor/BaseDatos configurado.");
+            }
+
+            var docConfig = ExtractionConfig.FromCredenciales(
+                credAconex,
+                credBd,
+                projectName,
+                documentFieldMappings);
+            var configDict = docConfig.ToDictionary();
+
+            System.Console.WriteLine("FullExtraction: Documentos...");
+            var docWorker = new DocumentExtractionWorker(configDict, connectionStringDocs);
+            docWorker.Documentos(projectId);
+            etapasEjecutadas.Add("Documentos");
+
+            //System.Console.WriteLine("FullExtraction: ProcessIncidents...");
+            //var incidentWorker = new IncidentExtractionWorker(configDict, connectionStringDocs);
+            //incidentWorker.ProcessIncidents(projectId);
+            //etapasEjecutadas.Add("ProcessIncidents");
+
+            System.Console.WriteLine("FullExtraction: Correos...");
+            var mailWorker = new MailExtractionWorker(configDict, connectionStringDocs);
+            mailWorker.Correos(projectId);
+            etapasEjecutadas.Add("Correos");
+
+            System.Console.WriteLine("FullExtraction: FlujosdeTrabajo...");
+            var workflowWorker = new WorkflowExtractionWorker(configDict, connectionStringDocs);
+            workflowWorker.FlujosdeTrabajo(projectId);
+            etapasEjecutadas.Add("FlujosdeTrabajo");
+
+            await Task.CompletedTask;
         }
 
         /// <summary>

@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace SigmabotSync.Application.Extraction
 {
-    public class IncidentWorker
+    public class IncidentExtractionWorker
     {
         private readonly Dictionary<string, string> _config;
         private readonly string _connectionString;
@@ -25,7 +25,7 @@ namespace SigmabotSync.Application.Extraction
         private Dictionary<string, string> mCustomFields;
 
 
-        public IncidentWorker(Dictionary<string, string> config, string connectionString)
+        public IncidentExtractionWorker(Dictionary<string, string> config, string connectionString)
         {
             _config = config;
             _dbConField = new SqlConnection(connectionString);

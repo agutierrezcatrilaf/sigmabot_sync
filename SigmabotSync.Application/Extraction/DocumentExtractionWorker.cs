@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 
 namespace SigmabotSync.Application.Extraction
 {
-    public class DocumentSyncWorker
+    public class DocumentExtractionWorker
     {
         /// <summary>Mappings por defecto cuando DocumentFieldMappings no está configurado.</summary>
         private static readonly List<DocumentFieldMapping> DefaultFieldMappings = new List<DocumentFieldMapping>
@@ -36,7 +36,7 @@ namespace SigmabotSync.Application.Extraction
         private DataTable DocumentosTmp;
         private DataTable Metadatatmp;
 
-        public DocumentSyncWorker(Dictionary<string, string> config, string connectionString)
+        public DocumentExtractionWorker(Dictionary<string, string> config, string connectionString)
         {
             _config = config;
             _dbConDocs = new SqlConnection(connectionString);

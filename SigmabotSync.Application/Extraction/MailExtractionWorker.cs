@@ -17,7 +17,7 @@ using System.Xml;
 
 namespace SigmabotSync.Application.Extraction
 {
-    public class MailSyncWorker
+    public class MailExtractionWorker
     {
         private Dictionary<string, string> _config;
         private readonly SqlConnection _dbConMails;
@@ -44,7 +44,7 @@ namespace SigmabotSync.Application.Extraction
         private string _fechaInicio;
         private string _fechaFin;
 
-        public MailSyncWorker(Dictionary<string, string> config, string connectionString)
+        public MailExtractionWorker(Dictionary<string, string> config, string connectionString)
         {
             _config = config;
             _dbConMails = new SqlConnection(connectionString);
@@ -205,7 +205,7 @@ namespace SigmabotSync.Application.Extraction
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
                 request.ContentType = "application/vnd.aconex.mail.v3+xml";
                 request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
+                //request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
                 request.Accept = "application/xml";
 
                 using (WebResponse response = request.GetResponse())

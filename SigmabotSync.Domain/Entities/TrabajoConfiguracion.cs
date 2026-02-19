@@ -39,6 +39,9 @@ namespace SigmabotSync.Domain.Entities
         /// <summary>Id de la credencial BD en tabla Credenciales (desde TrabajosConfiguracion Nombre=CredencialBD).</summary>
         public int? CredencialBDId { get; set; }
 
+        /// <summary>Tipo de trabajo: FileExtraction, ProjectSync, FullExtraction. Viene del campo Tipo de la tabla Trabajos.</summary>
+        public string TipoTrabajo { get; set; }
+
         /// <summary>
         /// Construye la lista de DocumentFieldMapping a partir de CamposConsulta, CamposResponse y CamposBD.
         /// Acepta listas separadas por comas o JSON arrays; mismo número de elementos (por índice: ApiField, JsonProperty, DbColumn).

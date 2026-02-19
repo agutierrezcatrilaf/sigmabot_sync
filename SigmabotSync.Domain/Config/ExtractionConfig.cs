@@ -73,7 +73,7 @@ namespace SigmabotSync.Domain.Config
         }
 
         /// <summary>
-        /// Crea una configuración desde ExtractionFilesConfig (settings.json) para DocumentSyncWorker.
+        /// Crea una configuración desde ExtractionFilesConfig (settings.json) para DocumentExtractionWorker.
         /// </summary>
         public static ExtractionConfig FromExtractionFilesConfig(ExtractionFilesConfig extractionFiles)
         {

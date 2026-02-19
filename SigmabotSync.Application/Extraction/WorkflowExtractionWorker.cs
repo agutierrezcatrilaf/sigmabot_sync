@@ -15,7 +15,7 @@ using System.Xml;
 
 namespace SigmabotSync.Application.Extraction
 {
-    public class WorkflowSyncWorker
+    public class WorkflowExtractionWorker
     {
         public Dictionary<string, MemProject> MemProjects { get; private set; }
         public Dictionary<string, bool> MemUsers { get; private set; }
@@ -36,7 +36,7 @@ namespace SigmabotSync.Application.Extraction
         private Dictionary<string, string> _config;
         private readonly SqlConnection _dbConWorkflow;
 
-        public WorkflowSyncWorker(Dictionary<string, string> config, string connectionString)
+        public WorkflowExtractionWorker(Dictionary<string, string> config, string connectionString)
         {
             _config = config;
             _dbConWorkflow = new SqlConnection(connectionString);
@@ -60,7 +60,7 @@ namespace SigmabotSync.Application.Extraction
             catch (Exception ex)
             {
                 // Log o manejo de error
-                Utilities.Wlog($"Error en FlujosdeTrabajo: {ex.Message}",0);
+                Utilities.Wlog($"Error en FlujosdeTrabajo: {ex.Message}", 0);
             }
         }
 
@@ -143,7 +143,7 @@ namespace SigmabotSync.Application.Extraction
             Archivostmp.Columns.Add(new DataColumn("ACXTrackingId", typeof(string)));
             Archivostmp.Columns.Add(new DataColumn("Version", typeof(string)));
             Archivostmp.Columns.Add(new DataColumn("Archivo", typeof(string)));
-            Archivostmp.Columns.Add(new DataColumn("Tama�o", typeof(long)));
+            Archivostmp.Columns.Add(new DataColumn("Tamaño", typeof(long)));
 
             // Crear DataTable Asignadostmp
             Asignadostmp = new DataTable("Asignados_tmp");
@@ -297,7 +297,7 @@ namespace SigmabotSync.Application.Extraction
         public void NewACXUsersToMemory(string projid)
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-    
+
             string authcode = Utilities.EncodeTexto($"{_config["ACXUser"]}:{_config["ACXPass"]}");
 
             List<string> memUserByProject = new List<string>();
@@ -887,7 +887,7 @@ namespace SigmabotSync.Application.Extraction
                 archivo["ACXTrackingId"] = docTrackingId;
                 archivo["Version"] = docVersion;
                 archivo["Archivo"] = fileName;
-                archivo["Tama�o"] = fileSize;
+                archivo["Tamaño"] = fileSize;
                 Archivostmp.Rows.Add(archivo);
             }
             catch (Exception ex)
@@ -1049,8 +1049,8 @@ namespace SigmabotSync.Application.Extraction
                     "SELECT [ACXProjectId],[Numero],[Nombre],[Estado],[Plantilla],[NombreEmisor],[ACXIdEmisor],[OrganizacionEmisora],[MotivodeEmision] FROM FlujosdeTrabajo_tmp", "FlujosdeTrabajo");
 
                 BulkInsertAndReplace(Archivostmp, "Archivos_tmp", "Archivos",
-                    "INSERT INTO [Archivos] ([ACXProjectId],[IdFlujodeTrabajo],[NumeroFlujodeTrabajo],[Numero],[Titulo],[Revision],[ACXTrackingId],[Version],[Archivo],[Tama�o]) " +
-                    "SELECT [ACXProjectId],[IdFlujodeTrabajo],[NumeroFlujodeTrabajo],[Numero],[Titulo],[Revision],[ACXTrackingId],[Version],[Archivo],[Tama�o] FROM Archivos_tmp", "Archivos");
+                    "INSERT INTO [Archivos] ([ACXProjectId],[IdFlujodeTrabajo],[NumeroFlujodeTrabajo],[Numero],[Titulo],[Revision],[ACXTrackingId],[Version],[Archivo],[Tamaño]) " +
+                    "SELECT [ACXProjectId],[IdFlujodeTrabajo],[NumeroFlujodeTrabajo],[Numero],[Titulo],[Revision],[ACXTrackingId],[Version],[Archivo],[Tamaño] FROM Archivos_tmp", "Archivos");
 
                 BulkInsertAndReplace(Asignadostmp, "Asignados_tmp", "Asignados",
                     "INSERT INTO [Asignados] ([ACXProjectId],[IdFlujodeTrabajo],[NumeroFlujodeTrabajo],[Organizacion],[Nombre],[ACXIdAsignado]) " +
