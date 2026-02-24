@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
-using System.Text;
-using System.Threading.Tasks;
 using SigmabotSync.Domain.Entities;
 
 namespace SigmabotSync.Domain.Config
@@ -52,46 +49,6 @@ namespace SigmabotSync.Domain.Config
             if (DocumentFieldMappings != null && DocumentFieldMappings.Count > 0)
                 d["DocumentFieldMappings"] = JsonConvert.SerializeObject(DocumentFieldMappings);
             return d;
-        }
-
-        /// <summary>
-        /// Crea una configuración desde AconexSettings (temporal)
-        /// </summary>
-        public static ExtractionConfig FromAconexSettings(AconexSettings settings, string connectionString, string projectName = "")
-        {
-            return new ExtractionConfig
-            {
-                ACXUser = settings.UserAconex,
-                ACXPass = settings.PassAconex,
-                IntegrationIdAconex = settings.IntegrationIdAconex,
-                FieldIntegrationId = settings.IntegrationIdAconex, // Por defecto mismo que IntegrationId
-                NombrePrj = projectName,
-                OrgId = "", // TODO: Obtener de BD
-                userid = "", // TODO: Obtener de BD
-                ConnectionString = connectionString
-            };
-        }
-
-        /// <summary>
-        /// Crea una configuración desde ExtractionFilesConfig (settings.json) para DocumentExtractionWorker.
-        /// </summary>
-        public static ExtractionConfig FromExtractionFilesConfig(ExtractionFilesConfig extractionFiles)
-        {
-            if (extractionFiles == null)
-                throw new ArgumentNullException(nameof(extractionFiles));
-
-            return new ExtractionConfig
-            {
-                ACXUser = extractionFiles.UserAconex,
-                ACXPass = extractionFiles.PassAconex,
-                IntegrationIdAconex = extractionFiles.IntegrationIdAconex,
-                FieldIntegrationId = extractionFiles.IntegrationIdAconex,
-                NombrePrj = extractionFiles.ProjectName ?? "Proyecto",
-                OrgId = extractionFiles.OrgId ?? "",
-                userid = extractionFiles.UserId ?? "",
-                ConnectionString = extractionFiles.GetConnectionString(),
-                DocumentFieldMappings = extractionFiles.DocumentFieldMappings
-            };
         }
 
         /// <summary>

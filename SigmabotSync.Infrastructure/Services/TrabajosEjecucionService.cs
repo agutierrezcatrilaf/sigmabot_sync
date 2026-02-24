@@ -5,12 +5,15 @@ using System.Data.SqlClient;
 namespace SigmabotSync.Infrastructure.Services
 {
     /// <summary>
-    /// Inserta registros de historial de ejecución en la tabla TrabajosEjecucion.
-    /// Un insert por cada ejecución (detalle, error, etapas ejecutadas).
+    /// Operaciones sobre la tabla TrabajosEjecucion: registro de inicio de ejecución (FechaHoraFin NULL),
+    /// actualización al finalizar, y consulta de ejecución en curso para evitar duplicados.
     /// </summary>
     public class TrabajosEjecucionService
     {
         private readonly string _connectionString;
+
+        /// <summary>Tiempo máximo que se considera "en curso" una ejecución sin FechaHoraFin; pasado este tiempo se considera abandonada y se permite una nueva ejecución (p. ej. scheduler cada 10 min).</summary>
+        public static readonly TimeSpan TiempoMaximoEnCursoPorDefecto = TimeSpan.FromMinutes(60);
 
         public TrabajosEjecucionService(string connectionString)
         {
@@ -18,13 +21,137 @@ namespace SigmabotSync.Infrastructure.Services
         }
 
         /// <summary>
-        /// Inserta un registro histórico de ejecución del trabajo.
+        /// Indica si existe una ejecución en curso para el trabajo (registro con FechaHoraFin NULL y FechaHoraInicio dentro del margen).
+        /// Sirve para no lanzar una segunda instancia del mismo trabajo.
         /// </summary>
-        /// <param name="tipoEjecucion">"Manual" o "Scheduler".</param>
+        /// <param name="idTrabajo">Id del trabajo.</param>
+        /// <param name="tiempoMaximoEnCurso">Ejecuciones con inicio anterior a (ahora - tiempoMaximoEnCurso) se consideran abandonadas. Si null, usa TiempoMaximoEnCursoPorDefecto (24h).</param>
+        public bool ExisteEjecucionEnCurso(int idTrabajo, TimeSpan? tiempoMaximoEnCurso = null)
+        {
+            var margen = tiempoMaximoEnCurso ?? TiempoMaximoEnCursoPorDefecto;
+            var desde = DateTime.Now - margen;
+
+            const string sql = @"
+                SELECT 1 FROM [dbo].[TrabajosEjecucion] WITH (NOLOCK)
+                WHERE IdTrabajo = @IdTrabajo
+                  AND FechaHoraFin IS NULL
+                  AND FechaHoraInicio >= @Desde";
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    cmd.Parameters.AddWithValue("@Desde", desde);
+                    using (var rdr = cmd.ExecuteReader())
+                        return rdr.HasRows;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Devuelve los IdTrabajo que tienen al menos una ejecución en curso (FechaHoraFin NULL, inicio dentro del margen).
+        /// Útil para informar en log cuando no hay pendientes pero sí trabajos ejecutándose.
+        /// </summary>
+        public IReadOnlyList<int> ObtenerIdsTrabajosEnCurso(TimeSpan? tiempoMaximoEnCurso = null)
+        {
+            var margen = tiempoMaximoEnCurso ?? TiempoMaximoEnCursoPorDefecto;
+            var desde = DateTime.Now - margen;
+
+            const string sql = @"
+                SELECT DISTINCT IdTrabajo FROM [dbo].[TrabajosEjecucion] WITH (NOLOCK)
+                WHERE FechaHoraFin IS NULL
+                  AND FechaHoraInicio >= @Desde
+                ORDER BY IdTrabajo";
+
+            var lista = new List<int>();
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@Desde", desde);
+                    using (var rdr = cmd.ExecuteReader())
+                    {
+                        while (rdr.Read())
+                            lista.Add(rdr.GetInt32(0));
+                    }
+                }
+            }
+            return lista;
+        }
+
+        /// <summary>
+        /// Registra el inicio de una ejecución (FechaHoraFin NULL). Debe actualizarse con ActualizarFin al terminar.
+        /// Requiere que la columna FechaHoraFin permita NULL en la tabla TrabajosEjecucion.
+        /// </summary>
+        /// <returns>Id del registro insertado (para pasarlo a ActualizarFin).</returns>
+        public int InsertarInicio(int idTrabajo, DateTime fechaHoraInicio, string tipoEjecucion = "Scheduler")
+        {
+            const string sql = @"
+                INSERT INTO [dbo].[TrabajosEjecucion] (IdTrabajo, FechaHoraInicio, FechaHoraFin, Exito, MensajeError, EtapasEjecutadas, DetalleEjecucion, TipoEjecucion)
+                OUTPUT INSERTED.Id
+                VALUES (@IdTrabajo, @FechaHoraInicio, NULL, 0, NULL, NULL, NULL, @TipoEjecucion)";
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    cmd.Parameters.AddWithValue("@FechaHoraInicio", fechaHoraInicio);
+                    cmd.Parameters.AddWithValue("@TipoEjecucion", (object)tipoEjecucion ?? DBNull.Value);
+                    return (int)cmd.ExecuteScalar();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Actualiza el registro de ejecución creado con InsertarInicio al finalizar (FechaHoraFin y resultado).
+        /// </summary>
+        public void ActualizarFin(
+            int idEjecucion,
+            DateTime fechaHoraFin,
+            bool exito,
+            string mensajeError,
+            IReadOnlyList<string> etapasEjecutadas,
+            string detalleEjecucion = null)
+        {
+            var etapas = etapasEjecutadas != null && etapasEjecutadas.Count > 0
+                ? string.Join(",", etapasEjecutadas)
+                : null;
+
+            const string sql = @"
+                UPDATE [dbo].[TrabajosEjecucion]
+                SET FechaHoraFin = @FechaHoraFin, Exito = @Exito, MensajeError = @MensajeError,
+                    EtapasEjecutadas = @EtapasEjecutadas, DetalleEjecucion = @DetalleEjecucion
+                WHERE Id = @Id";
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@Id", idEjecucion);
+                    cmd.Parameters.AddWithValue("@FechaHoraFin", fechaHoraFin);
+                    cmd.Parameters.AddWithValue("@Exito", exito);
+                    cmd.Parameters.AddWithValue("@MensajeError", (object)mensajeError ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@EtapasEjecutadas", (object)etapas ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@DetalleEjecucion", (object)detalleEjecucion ?? DBNull.Value);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Inserta un registro histórico completo (inicio y fin). Útil para compatibilidad o cargas manuales.
+        /// FechaHoraFin puede ser null para registrar solo inicio.
+        /// </summary>
         public void Insertar(
             int idTrabajo,
             DateTime fechaHoraInicio,
-            DateTime fechaHoraFin,
+            DateTime? fechaHoraFin,
             bool exito,
             string mensajeError,
             IReadOnlyList<string> etapasEjecutadas,
@@ -46,7 +173,7 @@ namespace SigmabotSync.Infrastructure.Services
                 {
                     cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
                     cmd.Parameters.AddWithValue("@FechaHoraInicio", fechaHoraInicio);
-                    cmd.Parameters.AddWithValue("@FechaHoraFin", fechaHoraFin);
+                    cmd.Parameters.AddWithValue("@FechaHoraFin", (object)fechaHoraFin ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@Exito", exito);
                     cmd.Parameters.AddWithValue("@MensajeError", (object)mensajeError ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@EtapasEjecutadas", (object)etapas ?? DBNull.Value);

@@ -235,8 +235,9 @@ namespace SigmabotSync.Application.Extraction
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Utilities.Wlog($"Correos: ERROR al obtener total de páginas (GetMaxPages): {ex.Message}", 0);
                 return 0;
             }
         }

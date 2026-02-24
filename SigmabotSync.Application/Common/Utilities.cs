@@ -34,15 +34,25 @@ namespace SigmabotSync.Application.Common
             return Convert.ToBase64String(bytes);
         }
 
+        /// <summary>Escribe en el archivo de log (si está configurado) y en consola. Un solo punto de salida para mensajes.</summary>
         public static void Wlog(string texto, int nivel)
         {
             try
             {
-                File.AppendAllText(AppState.LogFile, texto + Environment.NewLine);
+                if (!string.IsNullOrEmpty(AppState.LogFile))
+                    File.AppendAllText(AppState.LogFile, texto + Environment.NewLine);
             }
             catch (Exception)
             {
                 // Intencionalmente vacío
+            }
+            try
+            {
+                System.Console.WriteLine(texto);
+            }
+            catch (Exception)
+            {
+                // Consola no disponible (ej. ejecución desde scheduler sin ventana)
             }
         }
 

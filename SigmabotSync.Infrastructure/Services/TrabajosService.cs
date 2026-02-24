@@ -109,6 +109,15 @@ namespace SigmabotSync.Infrastructure.Services
                                 case "BasePath":
                                     result.BasePath = valor;
                                     break;
+                                case "TablaMetadata":
+                                    result.TablaMetadata = valor;
+                                    break;
+                                case "DocumentTypeIdDefault":
+                                    result.DocumentTypeIdDefault = valor;
+                                    break;
+                                case "DocumentStatusIdDefault":
+                                    result.DocumentStatusIdDefault = valor;
+                                    break;
                                 case "CredencialAconex":
                                     if (int.TryParse(valor, out int idAconex))
                                         result.CredencialAconexId = idAconex;

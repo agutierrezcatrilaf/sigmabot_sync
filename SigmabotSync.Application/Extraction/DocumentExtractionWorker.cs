@@ -55,7 +55,10 @@ namespace SigmabotSync.Application.Extraction
                 if (list != null && list.Count > 0)
                     return list;
             }
-            catch { /* fallback a default */ }
+            catch (Exception ex)
+            {
+                Utilities.Wlog($"Documentos: no se pudo deserializar DocumentFieldMappings, usando valores por defecto: {ex.Message}", 0);
+            }
             return new List<DocumentFieldMapping>(DefaultFieldMappings);
         }
 

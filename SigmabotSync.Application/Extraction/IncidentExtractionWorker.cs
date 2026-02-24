@@ -411,7 +411,7 @@ namespace SigmabotSync.Application.Extraction
             }
             catch (Exception ex)
             {
-                var a = ex.Message;
+                Utilities.Wlog($"Incidentes: ERROR al agregar fila a Incidentestmp: {ex.Message}", 0);
             }
         }
 

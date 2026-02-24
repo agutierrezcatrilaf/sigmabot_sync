@@ -11,7 +11,8 @@ namespace SigmabotSync.Domain.Entities
         public int Id { get; set; }
         public int IdTrabajo { get; set; }
         public DateTime FechaHoraInicio { get; set; }
-        public DateTime FechaHoraFin { get; set; }
+        /// <summary>NULL mientras la ejecución está en curso; se actualiza al finalizar.</summary>
+        public DateTime? FechaHoraFin { get; set; }
         public bool Exito { get; set; }
         public string MensajeError { get; set; }
         /// <summary>Etapas ejecutadas, separadas por coma (ej. "FileExtraction,DocumentExtraction").</summary>

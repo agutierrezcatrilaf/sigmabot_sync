@@ -17,6 +17,7 @@ namespace SigmabotSync.Console
         public const string FileExtraction = "FileExtraction";
         public const string ProjectSync = "ProjectSync";
         public const string FullExtraction = "FullExtraction";
+        public const string FileUploadWithMetadata = "FileUploadWithMetadata";
     }
 
     class Program
@@ -26,15 +27,19 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 3;
+        private static readonly int? DebugIdTrabajo = 2;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
 
         static async Task Main(string[] args)
         {
-            System.Console.WriteLine("=== SigmaBot File Extraction Console ===");
-            System.Console.WriteLine();
+            DailyLog.Inicializar();
+            SigmabotSync.Application.Common.AppState.LogFile = DailyLog.GetRutaLogActual();
+            SigmabotSync.Application.Common.Utilities.Wlog("[SigmaBot] Inicio proceso " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " | BaseDirectory=" + AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'), 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("=== SigmaBot File Extraction Console ===", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("Log: " + DailyLog.GetRutaLogActual(), 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             string connectionString = ObtenerConnectionStringDesdeSettings();
             if (connectionString == null)
@@ -43,8 +48,8 @@ namespace SigmabotSync.Console
             // Al debuggear: si DebugIdTrabajo está definido, ejecutar solo ese trabajo (ignora args)
             if (DebugIdTrabajo.HasValue)
             {
-                System.Console.WriteLine("[Debug] Ejecutando trabajo Id=" + DebugIdTrabajo.Value + " (DebugIdTrabajo en código)");
-                System.Console.WriteLine();
+                SigmabotSync.Application.Common.Utilities.Wlog("[Debug] Ejecutando trabajo Id=" + DebugIdTrabajo.Value + " (DebugIdTrabajo en código)", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
                 await EjecutarUnTrabajoAsync(connectionString, DebugIdTrabajo.Value, "Local");
                 return;
             }
@@ -53,8 +58,8 @@ namespace SigmabotSync.Console
             var (idLocal, esLocal) = ObtenerIdTrabajoLocal(args);
             if (idLocal.HasValue)
             {
-                System.Console.WriteLine(esLocal ? "Modo local: ejecutando trabajo Id=" + idLocal.Value : "Modo manual: ejecutando trabajo Id=" + idLocal.Value);
-                System.Console.WriteLine();
+                SigmabotSync.Application.Common.Utilities.Wlog(esLocal ? "Modo local: ejecutando trabajo Id=" + idLocal.Value : "Modo manual: ejecutando trabajo Id=" + idLocal.Value, 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
                 await EjecutarUnTrabajoAsync(connectionString, idLocal.Value, esLocal ? "Local" : "Manual");
                 return;
             }
@@ -62,19 +67,61 @@ namespace SigmabotSync.Console
             var pendientes = ObtenerTrabajosPendientesParaScheduler(connectionString);
             if (pendientes != null && pendientes.Count > 0)
             {
-                System.Console.WriteLine("Modo scheduler: " + pendientes.Count + " trabajo(s) pendiente(s) según TrabajosProgramacion.");
-                System.Console.WriteLine();
+                var pendientesNoEnCurso = new List<int>();
+                foreach (var id in pendientes)
+                {
+                    if (ExisteEjecucionEnCurso(connectionString, id))
+                    {
+                        var msg = "Trabajo Id=" + id + " omitido: ya está en ejecución (FechaHoraFin NULL en TrabajosEjecucion).";
+                        SigmabotSync.Application.Common.Utilities.Wlog("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg, 0);
+                    }
+                    else
+                        pendientesNoEnCurso.Add(id);
+                }
+                pendientes = pendientesNoEnCurso;
+            }
+            if (pendientes != null && pendientes.Count > 0)
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog("Modo scheduler: " + pendientes.Count + " trabajo(s) pendiente(s) según TrabajosProgramacion.", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
                 foreach (var idTrabajo in pendientes)
                 {
-                    System.Console.WriteLine("--- Ejecutando trabajo Id=" + idTrabajo + " ---");
+                    SigmabotSync.Application.Common.Utilities.Wlog("--- Ejecutando trabajo Id=" + idTrabajo + " ---", 0);
                     await EjecutarUnTrabajoAsync(connectionString, idTrabajo, "Scheduler");
-                    System.Console.WriteLine();
+                    SigmabotSync.Application.Common.Utilities.Wlog("", 0);
                 }
-                System.Console.WriteLine("Scheduler: ejecución finalizada.");
+                SigmabotSync.Application.Common.Utilities.Wlog("Scheduler: ejecución finalizada.", 0);
             }
             else
             {
-                System.Console.WriteLine("No hay trabajos pendientes. Para ejecutar un trabajo en local: SigmabotSync.Console.exe --local <IdTrabajo> (o -l <IdTrabajo>). Manual: --manual <IdTrabajo> o solo <IdTrabajo>.");
+                var enCurso = ObtenerIdsTrabajosEnCurso(connectionString);
+                if (enCurso != null && enCurso.Count > 0)
+                {
+                    var msg = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] No hay trabajos pendientes. Hay " + enCurso.Count +
+                        " trabajo(s) en ejecución (Id=" + string.Join(", Id=", enCurso) + "). No se relanza ninguna instancia.";
+                    SigmabotSync.Application.Common.Utilities.Wlog(msg, 0);
+                }
+                else
+                {
+                    var msg = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] Scheduler: ejecución completada sin trabajos pendientes.";
+                    SigmabotSync.Application.Common.Utilities.Wlog(msg, 0);
+                }
+            }
+        }
+
+        /// <summary>Devuelve los IdTrabajo que tienen una ejecución en curso (para informar en log).</summary>
+        static IReadOnlyList<int> ObtenerIdsTrabajosEnCurso(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString)) return new int[0];
+            try
+            {
+                var servicio = new TrabajosEjecucionService(connectionString);
+                return servicio.ObtenerIdsTrabajosEnCurso();
+            }
+            catch (Exception ex)
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] ObtenerIdsTrabajosEnCurso: no se pudo consultar TrabajosEjecucion: {ex.Message}", 0);
+                return new int[0];
             }
         }
 
@@ -116,6 +163,7 @@ namespace SigmabotSync.Console
         static async Task EjecutarUnTrabajoAsync(string connectionString, int idTrabajo, string tipoEjecucion = "Scheduler")
         {
             DateTime? fechaInicioEjecucion = null;
+            int? idEjecucion = null;
             var etapasEjecutadas = new List<string>();
             bool exito = false;
             string mensajeError = null;
@@ -123,6 +171,13 @@ namespace SigmabotSync.Console
 
             try
             {
+                if (ExisteEjecucionEnCurso(connectionString, idTrabajo))
+                {
+                    var msg = "El trabajo Id=" + idTrabajo + " ya está en ejecución. No se inicia otra instancia.";
+                    SigmabotSync.Application.Common.Utilities.Wlog("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg, 0);
+                    return;
+                }
+
                 TrabajoConfiguracion trabajoConfig = ObtenerYValidarConfiguracionTrabajo(idTrabajo, connectionString);
                 if (trabajoConfig == null)
                     return;
@@ -130,25 +185,27 @@ namespace SigmabotSync.Console
                 if (!ObtenerYValidarCredenciales(trabajoConfig, connectionString, out var credAconex, out var credBd))
                     return;
 
-                fechaInicioEjecucion = DateTime.Now;
-
                 string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
                 bool tipoValido = tipoTrabajo == TipoTrabajoConst.FileExtraction
                     || tipoTrabajo == TipoTrabajoConst.ProjectSync
-                    || tipoTrabajo == TipoTrabajoConst.FullExtraction;
+                    || tipoTrabajo == TipoTrabajoConst.FullExtraction
+                    || tipoTrabajo == TipoTrabajoConst.FileUploadWithMetadata;
 
                 if (!tipoValido)
                 {
                     mensajeError = string.IsNullOrEmpty(tipoTrabajo)
-                        ? "Tipo de trabajo no configurado (campo Tipo en tabla Trabajos). Use: FileExtraction, ProjectSync o FullExtraction."
-                        : "Tipo de trabajo no reconocido: " + tipoTrabajo + ". Use: FileExtraction, ProjectSync o FullExtraction.";
-                    System.Console.WriteLine("No se ejecuta: " + mensajeError);
+                        ? "Tipo de trabajo no configurado (campo Tipo en tabla Trabajos). Use: FileExtraction, ProjectSync, FullExtraction o FileUploadWithMetadata."
+                        : "Tipo de trabajo no reconocido: " + tipoTrabajo + ". Use: FileExtraction, ProjectSync, FullExtraction o FileUploadWithMetadata.";
+                    SigmabotSync.Application.Common.Utilities.Wlog("No se ejecuta: " + mensajeError, 0);
                     GuardarResultadoTrabajo(connectionString, idTrabajo, exito: false, mensajeError);
                     return;
                 }
 
-                System.Console.WriteLine("Tipo de trabajo: " + tipoTrabajo);
-                System.Console.WriteLine();
+                SigmabotSync.Application.Common.Utilities.Wlog("Tipo de trabajo: " + tipoTrabajo, 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
+
+                fechaInicioEjecucion = DateTime.Now;
+                idEjecucion = InsertarInicioEjecucion(connectionString, idTrabajo, fechaInicioEjecucion.Value, tipoEjecucion);
 
                 switch (tipoTrabajo)
                 {
@@ -162,16 +219,19 @@ namespace SigmabotSync.Console
                     case TipoTrabajoConst.FullExtraction:
                         await EjecutarFullExtractionAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         break;
+                    case TipoTrabajoConst.FileUploadWithMetadata:
+                        await EjecutarFileUploadWithMetadataAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                        break;
                 }
 
-                System.Console.WriteLine("=== Extracción completada exitosamente (IdTrabajo=" + idTrabajo + ") ===");
+                SigmabotSync.Application.Common.Utilities.Wlog("=== Extracción completada exitosamente (IdTrabajo=" + idTrabajo + ") ===", 0);
                 exito = true;
                 GuardarResultadoTrabajo(connectionString, idTrabajo, exito: true, null);
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine("ERROR: " + ex.Message);
-                System.Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: " + ex.Message, 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("Stack Trace: " + ex.StackTrace, 0);
 
                 mensajeError = ex.Message;
                 detalleError = ex.StackTrace;
@@ -179,19 +239,55 @@ namespace SigmabotSync.Console
             }
             finally
             {
-                if (fechaInicioEjecucion.HasValue)
+                if (idEjecucion.HasValue)
                 {
-                    GuardarHistorialEjecucion(
+                    ActualizarFinEjecucion(
                         connectionString,
-                        idTrabajo,
-                        fechaInicioEjecucion.Value,
+                        idEjecucion.Value,
                         DateTime.Now,
                         exito,
                         mensajeError,
                         etapasEjecutadas,
-                        exito ? null : detalleError,
-                        tipoEjecucion);
+                        exito ? null : detalleError);
                 }
+            }
+        }
+
+        /// <summary>Comprueba si el trabajo tiene una ejecución en curso (FechaHoraFin NULL) para no lanzar duplicados.</summary>
+        static bool ExisteEjecucionEnCurso(string connectionString, int idTrabajo)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString)) return false;
+            try
+            {
+                var servicio = new TrabajosEjecucionService(connectionString);
+                return servicio.ExisteEjecucionEnCurso(idTrabajo);
+            }
+            catch (Exception ex)
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] ExisteEjecucionEnCurso IdTrabajo={idTrabajo}: {ex.Message}", 0);
+                return false;
+            }
+        }
+
+        /// <summary>Registra el inicio de la ejecución en TrabajosEjecucion (FechaHoraFin NULL). Devuelve el Id del registro para actualizarlo al finalizar.</summary>
+        static int InsertarInicioEjecucion(string connectionString, int idTrabajo, DateTime fechaHoraInicio, string tipoEjecucion)
+        {
+            var servicio = new TrabajosEjecucionService(connectionString);
+            return servicio.InsertarInicio(idTrabajo, fechaHoraInicio, tipoEjecucion);
+        }
+
+        /// <summary>Actualiza el registro de ejecución con la hora fin y el resultado.</summary>
+        static void ActualizarFinEjecucion(string connectionString, int idEjecucion, DateTime fechaHoraFin, bool exito, string mensajeError, List<string> etapasEjecutadas, string detalleEjecucion)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString)) return;
+            try
+            {
+                var servicio = new TrabajosEjecucionService(connectionString);
+                servicio.ActualizarFin(idEjecucion, fechaHoraFin, exito, mensajeError, etapasEjecutadas, detalleEjecucion);
+            }
+            catch (Exception ex)
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] No se pudo actualizar historial en TrabajosEjecucion: {ex.Message}", 0);
             }
         }
 
@@ -209,8 +305,9 @@ namespace SigmabotSync.Console
                 var servicio = new TrabajosProgramacionService(connectionString);
                 return servicio.ObtenerTrabajosPendientesDeEjecucion(ahora ?? DateTime.Now);
             }
-            catch
+            catch (Exception ex)
             {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] ObtenerTrabajosPendientesParaScheduler: no se pudo consultar TrabajosProgramacion: {ex.Message}", 0);
                 return new int[0];
             }
         }
@@ -230,7 +327,7 @@ namespace SigmabotSync.Console
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine($"[Aviso] No se pudo actualizar resultado en tabla Trabajos: {ex.Message}");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] No se pudo actualizar resultado en tabla Trabajos: {ex.Message}", 0);
             }
         }
 
@@ -258,7 +355,7 @@ namespace SigmabotSync.Console
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine($"[Aviso] No se pudo guardar historial en TrabajosEjecucion: {ex.Message}");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] No se pudo guardar historial en TrabajosEjecucion: {ex.Message}", 0);
             }
         }
 
@@ -276,24 +373,15 @@ namespace SigmabotSync.Console
             string projectName = !string.IsNullOrWhiteSpace(trabajoConfig.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
             string basePath = !string.IsNullOrWhiteSpace(trabajoConfig.BasePath) ? trabajoConfig.BasePath.Trim() : null;
 
-            System.Console.WriteLine("Configuración desde TrabajosConfiguracion (IdTrabajo=" + trabajoConfig.IdTrabajo + "):");
-            System.Console.WriteLine($"  Proyecto={projectName}, IdProyecto={projectId}, BasePath={basePath ?? "(default)"}");
-            System.Console.WriteLine($"  Credencial Aconex: {credAconex.Nombre} ({credAconex.Aconex_Instancia})");
-            System.Console.WriteLine($"  Credencial BD: {credBd.Nombre}");
+            SigmabotSync.Application.Common.Utilities.Wlog("Configuración desde TrabajosConfiguracion (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto={projectName}, IdProyecto={projectId}, BasePath={basePath ?? "(default)"}", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial Aconex: {credAconex.Nombre} ({credAconex.Aconex_Instancia})", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre}", 0);
 
             var config = FileExtractionConfig.FromCredencial(credAconex, projectId, basePath);
             var returnFields = trabajoConfig.ToReturnFields();
             if (returnFields != null && returnFields.Count > 0)
                 config.ReturnFields = returnFields;
-
-            // Configurar logging
-            SigmabotSync.Application.Common.AppState.LogFile = System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                $"file_extraction_{DateTime.Now:yyyyMMdd_HHmmss}.log"
-            );
-
-            System.Console.WriteLine($"Log file: {SigmabotSync.Application.Common.AppState.LogFile}");
-            System.Console.WriteLine();
 
             // Crear worker
             var worker = new FileExtractionWorker(config);
@@ -301,17 +389,16 @@ namespace SigmabotSync.Console
             // Configurar eventos
             worker.OnProgress += (current, total) =>
             {
-                System.Console.WriteLine($"[Progreso] Página {current} de {total} ({(current * 100 / total)}%)");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Página {current} de {total} ({(current * 100 / total)}%)", 0);
             };
 
             worker.OnStatus += (status) =>
             {
-                System.Console.WriteLine($"[Estado] {status}");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
             };
 
-            System.Console.WriteLine("Iniciando extracción de archivos...");
-            System.Console.WriteLine("Presiona Ctrl+C para cancelar");
-            System.Console.WriteLine();
+            SigmabotSync.Application.Common.Utilities.Wlog("Iniciando extracción de archivos...", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             // Ejecutar extracción de archivos (Aconex) — descarga de documentos
             await worker.ProcessAllPagesAsync();
@@ -336,8 +423,8 @@ namespace SigmabotSync.Console
             var connectionStringDocs = credBd.GetConnectionString();
             if (!string.IsNullOrWhiteSpace(connectionStringDocs))
             {
-                System.Console.WriteLine();
-                System.Console.WriteLine("Sincronizando metadata de documentos en base de datos...");
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("Sincronizando metadata de documentos en base de datos...", 0);
 
                 var docConfig = ExtractionConfig.FromCredenciales(
                     credAconex,
@@ -349,12 +436,12 @@ namespace SigmabotSync.Console
                 var docWorker = new DocumentExtractionWorker(docConfig.ToDictionary(), connectionStringDocs);
                 docWorker.Documentos(projectId);
 
-                System.Console.WriteLine("Sincronización de documentos completada.");
+                SigmabotSync.Application.Common.Utilities.Wlog("Sincronización de documentos completada.", 0);
                 etapasEjecutadas.Add("DocumentExtraction");
             }
             else
             {
-                System.Console.WriteLine("(Credencial BD sin Servidor/BaseDatos: no se ejecuta sincronización de documentos)");
+                SigmabotSync.Application.Common.Utilities.Wlog("(Credencial BD sin Servidor/BaseDatos: no se ejecuta sincronización de documentos)", 0);
             }
         }
 
@@ -371,9 +458,9 @@ namespace SigmabotSync.Console
             // Sincronizar documentos modificados desde hace 1 día (se puede parametrizar después en TrabajosConfiguracion)
             DateTime since = DateTime.UtcNow.AddDays(-1);
 
-            System.Console.WriteLine("Configuración ProjectSync (IdTrabajo=" + trabajoConfig.IdTrabajo + "):");
-            System.Console.WriteLine($"  IdProyecto={projectId}, Since={since:yyyy-MM-dd HH:mm:ss} UTC");
-            System.Console.WriteLine();
+            SigmabotSync.Application.Common.Utilities.Wlog("Configuración ProjectSync (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  IdProyecto={projectId}, Since={since:yyyy-MM-dd HH:mm:ss} UTC", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             var client = new AconexDocumentClient(
                 credAconex.Aconex_Usuario ?? "",
@@ -384,11 +471,11 @@ namespace SigmabotSync.Console
 
             syncWorker.OnProgress += (current, total) =>
             {
-                System.Console.WriteLine($"[Progreso] Documento {current} de {total}");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Documento {current} de {total}", 0);
             };
             syncWorker.OnStatus += (status) =>
             {
-                System.Console.WriteLine($"[Estado] {status}");
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
             };
 
             await syncWorker.RunAsync(projectId, since);
@@ -421,7 +508,7 @@ namespace SigmabotSync.Console
                 documentFieldMappings);
             var configDict = docConfig.ToDictionary();
 
-            System.Console.WriteLine("FullExtraction: Documentos...");
+            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Documentos...", 0);
             var docWorker = new DocumentExtractionWorker(configDict, connectionStringDocs);
             docWorker.Documentos(projectId);
             etapasEjecutadas.Add("Documentos");
@@ -431,17 +518,51 @@ namespace SigmabotSync.Console
             //incidentWorker.ProcessIncidents(projectId);
             //etapasEjecutadas.Add("ProcessIncidents");
 
-            System.Console.WriteLine("FullExtraction: Correos...");
+            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Correos...", 0);
             var mailWorker = new MailExtractionWorker(configDict, connectionStringDocs);
             mailWorker.Correos(projectId);
             etapasEjecutadas.Add("Correos");
 
-            System.Console.WriteLine("FullExtraction: FlujosdeTrabajo...");
+            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: FlujosdeTrabajo...", 0);
             var workflowWorker = new WorkflowExtractionWorker(configDict, connectionStringDocs);
             workflowWorker.FlujosdeTrabajo(projectId);
             etapasEjecutadas.Add("FlujosdeTrabajo");
 
             await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Ejecuta FileUploadWithMetadata: lee tabla de metadata (CredencialBD + TablaMetadata), enlaza archivos en BasePath por docno y envía a Aconex.
+        /// </summary>
+        private static async Task EjecutarFileUploadWithMetadataAsync(
+            TrabajoConfiguracion trabajoConfig,
+            Credencial credAconex,
+            Credencial credBd,
+            List<string> etapasEjecutadas)
+        {
+            string projectId = trabajoConfig.IdProyecto ?? string.Empty;
+            string projectName = !string.IsNullOrWhiteSpace(trabajoConfig.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
+            string basePath = !string.IsNullOrWhiteSpace(trabajoConfig.BasePath) ? trabajoConfig.BasePath.Trim() : null;
+            string tablaMetadata = !string.IsNullOrWhiteSpace(trabajoConfig.TablaMetadata) ? trabajoConfig.TablaMetadata.Trim() : null;
+
+            SigmabotSync.Application.Common.Utilities.Wlog("Configuración FileUploadWithMetadata (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto={projectName}, IdProyecto={projectId}, BasePath={basePath ?? "(no configurado)"}, TablaMetadata={tablaMetadata ?? "(no configurado)"}", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial Aconex: {credAconex.Nombre} ({credAconex.Aconex_Instancia})", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre}", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog("", 0);
+
+            var worker = new FileUploadWithMetadataWorker(trabajoConfig, credAconex, credBd);
+            worker.OnProgress += (current, total) =>
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] {current} de {total}", 0);
+            };
+            worker.OnStatus += (status) =>
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
+            };
+
+            await worker.RunAsync();
+            etapasEjecutadas.Add("FileUploadWithMetadata");
         }
 
         /// <summary>
@@ -455,8 +576,8 @@ namespace SigmabotSync.Console
 
             if (string.IsNullOrWhiteSpace(settings?.DatabaseConnectionString))
             {
-                System.Console.WriteLine("ERROR: DatabaseConnectionString no está configurado en settings.json");
-                System.Console.WriteLine("Configura la conexión a la base de datos donde están las tablas Credenciales, Trabajos y TrabajosConfiguracion.");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: DatabaseConnectionString no está configurado en settings.json", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("Configura la conexión a la base de datos donde están las tablas Credenciales, Trabajos y TrabajosConfiguracion.", 0);
                 return null;
             }
 
@@ -474,18 +595,33 @@ namespace SigmabotSync.Console
 
             if (trabajoConfig == null)
             {
-                System.Console.WriteLine("ERROR: No hay configuración en TrabajosConfiguracion para IdTrabajo=" + idTrabajo + " o el trabajo no está en estado 'Activo' en la tabla Trabajos. Configure IdProyecto y el resto de parámetros en esas tablas.");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: No hay configuración en TrabajosConfiguracion para IdTrabajo=" + idTrabajo + " o el trabajo no está en estado 'Activo' en la tabla Trabajos. Configure IdProyecto y el resto de parámetros en esas tablas.", 0);
                 return null;
             }
             if (!trabajoConfig.CredencialAconexId.HasValue)
             {
-                System.Console.WriteLine("ERROR: Falta CredencialAconex en TrabajosConfiguracion (Id de la credencial en tabla Credenciales).");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: Falta CredencialAconex en TrabajosConfiguracion (Id de la credencial en tabla Credenciales).", 0);
                 return null;
             }
             if (!trabajoConfig.CredencialBDId.HasValue)
             {
-                System.Console.WriteLine("ERROR: Falta CredencialBD en TrabajosConfiguracion (Id de la credencial en tabla Credenciales).");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: Falta CredencialBD en TrabajosConfiguracion (Id de la credencial en tabla Credenciales).", 0);
                 return null;
+            }
+
+            string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
+            if (tipoTrabajo == TipoTrabajoConst.FileUploadWithMetadata)
+            {
+                if (string.IsNullOrWhiteSpace(trabajoConfig.TablaMetadata))
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog("ERROR: FileUploadWithMetadata requiere TablaMetadata en TrabajosConfiguracion.", 0);
+                    return null;
+                }
+                if (string.IsNullOrWhiteSpace(trabajoConfig.BasePath))
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog("ERROR: FileUploadWithMetadata requiere BasePath en TrabajosConfiguracion.", 0);
+                    return null;
+                }
             }
 
             return trabajoConfig;
@@ -510,12 +646,12 @@ namespace SigmabotSync.Console
 
             if (credAconex == null)
             {
-                System.Console.WriteLine("ERROR: No se encontró Credencial Id=" + trabajoConfig.CredencialAconexId + " en la tabla Credenciales (CredencialAconex).");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: No se encontró Credencial Id=" + trabajoConfig.CredencialAconexId + " en la tabla Credenciales (CredencialAconex).", 0);
                 return false;
             }
             if (credBd == null)
             {
-                System.Console.WriteLine("ERROR: No se encontró Credencial Id=" + trabajoConfig.CredencialBDId + " en la tabla Credenciales (CredencialBD).");
+                SigmabotSync.Application.Common.Utilities.Wlog("ERROR: No se encontró Credencial Id=" + trabajoConfig.CredencialBDId + " en la tabla Credenciales (CredencialBD).", 0);
                 return false;
             }
 

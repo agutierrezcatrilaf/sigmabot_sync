@@ -83,8 +83,6 @@ namespace SigmabotSync.Application.FileExtraction
                     {
                         processedDocuments += pageData.searchResults.Count;
                         
-                        // TODO: Aquí se procesará cada documento para descargar archivos
-                        // Por ahora solo contamos los documentos
                         foreach (var doc in pageData.searchResults)
                         {
                             // Procesar documento (descarga de archivo quedará para siguiente etapa)
@@ -180,12 +178,16 @@ namespace SigmabotSync.Application.FileExtraction
                 string version = document.GetDynamicValue("versionNumber") ?? "0";
                 string documentNumber = document.DocumentNumber ?? "";
 
+                // Nombre de carpeta seguro: cuando DocNo termina en .pdf, usar solo la parte antes del .pdf para la ruta local
+                string folderName = documentNumber;
+                if (!string.IsNullOrEmpty(folderName) && folderName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    folderName = folderName.Substring(0, folderName.Length - 4);
 
-                // Construir ruta de destino: origen/{projectID}/{documentID}/{version}/
+                // Construir ruta de destino: origen/{projectID}/{docNo_sin_pdf}/{version}/
                 string documentPath = Path.Combine(
                     _config.BasePath,
                     _config.ProjectId,
-                    documentNumber,
+                    folderName,
                     version
                 );
 
@@ -211,6 +213,18 @@ namespace SigmabotSync.Application.FileExtraction
                         async () => await downloadClient.SendAsync(request),
                         $"FileExtraction: Error al descargar documento {documentId}"
                     );
+
+                    // Documento sin archivo asociado (ej. controlled document without backing file): omitir sin fallar
+                    if (response.StatusCode == HttpStatusCode.BadRequest)
+                    {
+                        var errorBody = await response.Content.ReadAsStringAsync();
+                        if (errorBody != null && errorBody.IndexOf("CANNOT_DOWNLOAD_EMPTY_DOCUMENT", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            Utilities.Wlog($"FileExtraction: Documento ID={documentId} (DocNo={document.DocumentNumber}) sin archivo asociado en Aconex, se omite.", 1);
+                            OnStatus?.Invoke($"Omite (sin archivo): {document.DocumentNumber} v{version}");
+                            return;
+                        }
+                    }
 
                     response.EnsureSuccessStatusCode();
 

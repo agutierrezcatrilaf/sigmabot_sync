@@ -233,9 +233,9 @@ namespace SigmabotSync.Application.Extraction
                     {
                         File.Delete(archivo);
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Ignorar errores al eliminar archivo
+                        Utilities.Wlog($"Flujos: no se pudo eliminar archivo '{archivo}': {ex.Message}", 1);
                     }
                 }
             }
@@ -376,8 +376,9 @@ namespace SigmabotSync.Application.Extraction
                 }
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Utilities.Wlog($"Flujos: ERROR {{dbUserExists}} userid={userid}: {ex.Message}", 0);
                 return false;
             }
         }
@@ -919,8 +920,9 @@ namespace SigmabotSync.Application.Extraction
                 // Trunca la hora (como DateSerial en VB)
                 return new DateTime(localDate.Year, localDate.Month, localDate.Day);
             }
-            catch
+            catch (Exception ex)
             {
+                Utilities.Wlog($"Flujos: ERROR al parsear fecha (DateSerial): sdate={sdate}, {ex.Message}", 0);
                 return null;
             }
         }
@@ -935,9 +937,9 @@ namespace SigmabotSync.Application.Extraction
                     return node.InnerText;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Se ignora la excepci�n tal como en VB.NET
+                Utilities.Wlog($"Flujos: ERROR GetSingleSelect nodo={nodo}: {ex.Message}", 0);
             }
             return string.Empty;
         }
