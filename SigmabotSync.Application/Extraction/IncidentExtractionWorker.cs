@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -17,7 +17,6 @@ namespace SigmabotSync.Application.Extraction
     public class IncidentExtractionWorker
     {
         private readonly Dictionary<string, string> _config;
-        private readonly string _connectionString;
         private readonly SqlConnection _dbConField;
 
         public static DataTable Areastmp;

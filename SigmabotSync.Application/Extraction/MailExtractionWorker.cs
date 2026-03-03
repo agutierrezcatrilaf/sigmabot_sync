@@ -4,7 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -544,9 +544,6 @@ namespace SigmabotSync.Application.Extraction
         // Descargar adjuntos para un MailId
         void ObtenerAdjuntos(string mailId, string projectId, string mailbox, string authcode)
         {
-            const int maxRetries = 3;
-            int attempts = 0;
-
             string uri = $"https://us1.aconex.com/api/projects/{projectId}/mail/{mailId}";
 
             Utilities.EjecutarConReintentos(() =>

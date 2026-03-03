@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SigmabotSync.Application.FileExtraction
@@ -19,11 +20,31 @@ namespace SigmabotSync.Application.FileExtraction
     /// </summary>
     public class FileExtractionWorker
     {
+        private const int MaxConcurrentDownloads = 6;
+
+        // Campos mínimos que FileExtraction necesita siempre para funcionar,
+        // independientemente de lo que venga en TrabajosConfiguracion.CamposConsulta.
+        private static readonly string[] RequiredReturnFields = new[]
+        {
+            "docno",
+            "filename",
+            "trackingid",
+            "versionnumber"
+        };
+
         private readonly FileExtractionConfig _config;
         private readonly HttpClient _httpClient;
+        private readonly HttpClient _downloadClient;
+
+        private int _countSaved;
+        private int _countOmittedNoDocument;  // sin filename o documento vacio (CANNOT_DOWNLOAD_EMPTY_DOCUMENT)
+        private int _countOmittedAlreadyExists;
+        private int _countErrors;
 
         public event Action<int, int> OnProgress;
         public event Action<string> OnStatus;
+
+        private enum FileDownloadResult { Saved, Omitted, Error }
 
         public FileExtractionWorker(FileExtractionConfig config)
         {
@@ -36,6 +57,15 @@ namespace SigmabotSync.Application.FileExtraction
             // Mismo esquema que DocumentExtractionWorker (solo Authorization; sin X-Application-Key) para que el search no devuelva 401
             _httpClient.DefaultRequestHeaders.Add("Authorization", "Basic " + _config.AuthorizationHeader);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+
+            // Cliente compartido para descargas (reutilizable, evita agotar sockets)
+            var downloadHandler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
+            _downloadClient = new HttpClient(downloadHandler)
+            {
+                Timeout = TimeSpan.FromMinutes(10)
+            };
+            _downloadClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _config.AuthorizationHeader);
+            _downloadClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, sdch");
         }
 
         /// <summary>
@@ -67,7 +97,11 @@ namespace SigmabotSync.Application.FileExtraction
                     return;
                 }
 
-                // Procesar todas las páginas
+                _countSaved = 0;
+                _countOmittedNoDocument = 0;
+                _countOmittedAlreadyExists = 0;
+                _countErrors = 0;
+
                 int processedPages = 0;
                 long processedDocuments = 0;
 
@@ -82,12 +116,22 @@ namespace SigmabotSync.Application.FileExtraction
                     if (pageData != null && pageData.searchResults != null)
                     {
                         processedDocuments += pageData.searchResults.Count;
-                        
-                        foreach (var doc in pageData.searchResults)
+
+                        // Descargas en paralelo con límite de concurrencia para no saturar Aconex
+                        var semaphore = new SemaphoreSlim(MaxConcurrentDownloads);
+                        var downloadTasks = pageData.searchResults.Select(async doc =>
                         {
-                            // Procesar documento (descarga de archivo quedará para siguiente etapa)
-                            await ProcessDocumentAsync(doc);
-                        }
+                            await semaphore.WaitAsync();
+                            try
+                            {
+                                await ProcessDocumentAsync(doc);
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
+                        });
+                        await Task.WhenAll(downloadTasks);
 
                         processedPages++;
                     }
@@ -97,6 +141,8 @@ namespace SigmabotSync.Application.FileExtraction
                 }
 
                 OnStatus?.Invoke($"Proceso completado: {processedPages} páginas, {processedDocuments} documentos procesados");
+                int totalOmitted = _countOmittedNoDocument + _countOmittedAlreadyExists;
+                Utilities.Wlog($"FileExtraction resumen: Total procesados={processedDocuments}, Guardados={_countSaved}, Omitidos={totalOmitted} (sin documento/archivo={_countOmittedNoDocument}, ya existían={_countOmittedAlreadyExists}), Errores={_countErrors}", 0);
             }
             catch (Exception ex)
             {
@@ -114,32 +160,42 @@ namespace SigmabotSync.Application.FileExtraction
             string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
             string uri = $"{baseUrl}/api/projects/{_config.ProjectId}/register/search";
 
+            // Respetar CamposConsulta de TrabajosConfiguracion (_config.ReturnFields),
+            // pero garantizando siempre los mínimos que FileExtraction necesita.
+            var fields = _config.ReturnFields ?? new List<string>();
+            foreach (var campo in RequiredReturnFields)
+            {
+                if (!fields.Contains(campo, StringComparer.OrdinalIgnoreCase))
+                    fields.Add(campo);
+            }
+
             var requestBody = new
             {
                 orgId = _config.OrgId,
                 userId = _config.UserId,
-                returnFields = _config.ReturnFields,
+                returnFields = fields,
                 resultSize = _config.ResultSize.ToString(),
                 showDocHistory = "true",
                 pageNumber = pageNumber.ToString()
             };
 
             string jsonBody = JsonConvert.SerializeObject(requestBody);
-            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-
             try
             {
-                var response = await Utilities.EjecutarConReintentosAsync(
-                    async () => await _httpClient.PostAsync(uri, content),
-                    $"FileExtraction: Error al obtener página {pageNumber}"
-                );
+                using (var content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
+                {
+                    var response = await Utilities.EjecutarConReintentosAsync(
+                        async () => await _httpClient.PostAsync(uri, content),
+                        $"FileExtraction: Error al obtener página {pageNumber}"
+                    );
 
-                response.EnsureSuccessStatusCode();
+                    response.EnsureSuccessStatusCode();
 
-                string responseString = await response.Content.ReadAsStringAsync();
-                responseString = responseString.Replace("\u0003", ""); // Limpiar caracteres especiales
+                    string responseString = await response.Content.ReadAsStringAsync();
+                    responseString = responseString.Replace("\u0003", ""); // Limpiar caracteres especiales
 
-                return JsonConvert.DeserializeObject<Rootobject>(responseString);
+                    return JsonConvert.DeserializeObject<Rootobject>(responseString);
+                }
             }
             catch (Exception ex)
             {
@@ -149,28 +205,26 @@ namespace SigmabotSync.Application.FileExtraction
         }
 
         /// <summary>
-        /// Procesa un documento individual y descarga su archivo
+        /// Procesa un documento individual y descarga su archivo. Devuelve el resultado para el resumen.
         /// </summary>
-        private async Task ProcessDocumentAsync(Searchresult document)
+        private async Task<FileDownloadResult> ProcessDocumentAsync(Searchresult document)
         {
             try
             {
-                var versionStr = document.GetDynamicValue("versionNumber") ?? "0";
-                Utilities.Wlog($"FileExtraction: Procesando documento ID={document.Id}, DocNo={document.DocumentNumber}, Title={document.Title}, Version={versionStr}", 1);
-                
-                // Descargar el archivo del documento
-                await DownloadDocumentFileAsync(document);
+                return await DownloadDocumentFileAsync(document);
             }
             catch (Exception ex)
             {
                 Utilities.Wlog($"FileExtraction: ERROR procesando documento {document.Id}: {ex.Message}", 0);
+                Interlocked.Increment(ref _countErrors);
+                return FileDownloadResult.Error;
             }
         }
 
         /// <summary>
-        /// Descarga el archivo de un documento desde Aconex
+        /// Descarga el archivo de un documento desde Aconex. Devuelve Saved, Omitted o Error (errores se registran en log).
         /// </summary>
-        private async Task DownloadDocumentFileAsync(Searchresult document)
+        private async Task<FileDownloadResult> DownloadDocumentFileAsync(Searchresult document)
         {
             try
             {
@@ -178,12 +232,17 @@ namespace SigmabotSync.Application.FileExtraction
                 string version = document.GetDynamicValue("versionNumber") ?? "0";
                 string documentNumber = document.DocumentNumber ?? "";
 
-                // Nombre de carpeta seguro: cuando DocNo termina en .pdf, usar solo la parte antes del .pdf para la ruta local
+                string filenameFromMeta = document.GetDynamicValue("filename")?.ToString();
+                if (string.IsNullOrWhiteSpace(filenameFromMeta))
+                {
+                    Interlocked.Increment(ref _countOmittedNoDocument);
+                    return FileDownloadResult.Omitted;
+                }
+
                 string folderName = documentNumber;
                 if (!string.IsNullOrEmpty(folderName) && folderName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     folderName = folderName.Substring(0, folderName.Length - 4);
 
-                // Construir ruta de destino: origen/{projectID}/{docNo_sin_pdf}/{version}/
                 string documentPath = Path.Combine(
                     _config.BasePath,
                     _config.ProjectId,
@@ -191,67 +250,57 @@ namespace SigmabotSync.Application.FileExtraction
                     version
                 );
 
-                // Crear directorio si no existe
+                string fileName = string.Join("_", filenameFromMeta.Split(Path.GetInvalidFileNameChars()));
+                string filePath = Path.Combine(documentPath, fileName);
+
+                if (File.Exists(filePath))
+                {
+                    Interlocked.Increment(ref _countOmittedAlreadyExists);
+                    return FileDownloadResult.Omitted;
+                }
+
                 Directory.CreateDirectory(documentPath);
 
-                // Construir URL del endpoint
                 string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
                 string downloadUrl = $"{baseUrl}/api/projects/{_config.ProjectId}/register/{documentId}";
 
-                // Descarga con exactamente los mismos headers que el curl que funciona (solo Authorization + Accept-Encoding; sin X-Application-Key)
-                var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
-                using (var downloadClient = new HttpClient(handler))
+
+                using (var response = await _downloadClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
-                    downloadClient.Timeout = TimeSpan.FromMinutes(10);
-
-                    var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _config.AuthorizationHeader);
-                    request.Headers.Add("Accept-Encoding", "gzip, deflate, sdch");
-
-                    // Ejecutar descarga con reintentos
-                    var response = await Utilities.EjecutarConReintentosAsync(
-                        async () => await downloadClient.SendAsync(request),
-                        $"FileExtraction: Error al descargar documento {documentId}"
-                    );
-
-                    // Documento sin archivo asociado (ej. controlled document without backing file): omitir sin fallar
                     if (response.StatusCode == HttpStatusCode.BadRequest)
                     {
                         var errorBody = await response.Content.ReadAsStringAsync();
                         if (errorBody != null && errorBody.IndexOf("CANNOT_DOWNLOAD_EMPTY_DOCUMENT", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            Utilities.Wlog($"FileExtraction: Documento ID={documentId} (DocNo={document.DocumentNumber}) sin archivo asociado en Aconex, se omite.", 1);
-                            OnStatus?.Invoke($"Omite (sin archivo): {document.DocumentNumber} v{version}");
-                            return;
+                            Interlocked.Increment(ref _countOmittedNoDocument);
+                            return FileDownloadResult.Omitted;
                         }
                     }
 
                     response.EnsureSuccessStatusCode();
 
-                    // Obtener nombre del archivo desde el documento (dinámico) o usar un nombre por defecto
-                    string fileName = document.GetDynamicValue("filename");
-                    if (string.IsNullOrWhiteSpace(fileName)) fileName = $"document_{documentId}_v{version}.pdf";
-
-                    // Limpiar nombre de archivo de caracteres inválidos
-                    fileName = string.Join("_", fileName.Split(Path.GetInvalidFileNameChars()));
-
-                    string filePath = Path.Combine(documentPath, fileName);
-
-                    // Guardar archivo
                     using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
                         var contentStream = await response.Content.ReadAsStreamAsync();
                         await contentStream.CopyToAsync(fileStream);
                     }
-
-                    Utilities.Wlog($"FileExtraction: Archivo descargado: {filePath}", 1);
-                    OnStatus?.Invoke($"Archivo descargado: {document.DocumentNumber} v{version}");
                 }
+
+                Interlocked.Increment(ref _countSaved);
+                return FileDownloadResult.Saved;
+            }
+            catch (OperationCanceledException)
+            {
+                // Incluye TaskCanceledException (timeout de HttpClient o CancellationToken).
+                Utilities.Wlog($"FileExtraction: Timeout o cancelación al descargar documento {document.Id} (DocNo={document.DocumentNumber}). Se omite y se continúa.", 0);
+                Interlocked.Increment(ref _countErrors);
+                return FileDownloadResult.Error;
             }
             catch (Exception ex)
             {
                 Utilities.Wlog($"FileExtraction: ERROR descargando archivo del documento {document.Id}: {ex.Message}", 0);
-                throw;
+                Interlocked.Increment(ref _countErrors);
+                return FileDownloadResult.Error;
             }
         }
 
@@ -261,6 +310,7 @@ namespace SigmabotSync.Application.FileExtraction
         public void Dispose()
         {
             _httpClient?.Dispose();
+            _downloadClient?.Dispose();
         }
     }
 }

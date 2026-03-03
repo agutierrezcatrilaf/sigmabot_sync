@@ -48,7 +48,7 @@ namespace SigmabotSync.Domain.Entities
                 return string.Empty;
             var user = string.IsNullOrWhiteSpace(BD_Usuario) ? "" : $";User Id={BD_Usuario.Trim()}";
             var pass = string.IsNullOrWhiteSpace(BD_Clave) ? "" : $";Password={BD_Clave.Trim()}";
-            return $"Server={BD_Servidor.Trim()};Database={BD_BaseDatos.Trim()}{user}{pass};";
+            return $"Server={BD_Servidor.Trim()};Database={BD_BaseDatos.Trim()}{user}{pass};TrustServerCertificate=True;";
         }
     }
 }

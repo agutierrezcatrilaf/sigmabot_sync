@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using SigmabotSync.Domain.Models;
 using System;
 using System.Collections.Generic;
@@ -81,7 +81,7 @@ namespace SigmabotSync.Infrastructure.External
                 {
                     return (DocumentMetadata)serializer.Deserialize(reader);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     Console.WriteLine("Error al procesar metadata:");
                     Console.WriteLine(xml);

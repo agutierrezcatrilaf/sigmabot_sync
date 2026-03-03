@@ -27,7 +27,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 2;
+        private static readonly int? DebugIdTrabajo = 3;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -35,7 +35,6 @@ namespace SigmabotSync.Console
         static async Task Main(string[] args)
         {
             DailyLog.Inicializar();
-            SigmabotSync.Application.Common.AppState.LogFile = DailyLog.GetRutaLogActual();
             SigmabotSync.Application.Common.Utilities.Wlog("[SigmaBot] Inicio proceso " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " | BaseDirectory=" + AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'), 0);
             SigmabotSync.Application.Common.Utilities.Wlog("=== SigmaBot File Extraction Console ===", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("Log: " + DailyLog.GetRutaLogActual(), 0);
@@ -581,7 +580,21 @@ namespace SigmabotSync.Console
                 return null;
             }
 
-            return settings.DatabaseConnectionString.Trim();
+            return AsegurarTrustServerCertificate(settings.DatabaseConnectionString.Trim());
+        }
+
+        /// <summary>
+        /// Añade TrustServerCertificate=True a la cadena de conexión si no está presente.
+        /// En .NET 8 la validación SSL es estricta; con servidores que usan certificado no confiable (ej. self-signed) se necesita esto.
+        /// </summary>
+        private static string AsegurarTrustServerCertificate(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString)) return connectionString;
+            const string key = "TrustServerCertificate=";
+            if (connectionString.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                return connectionString;
+            var separator = connectionString.TrimEnd().EndsWith(";", StringComparison.Ordinal) ? "" : ";";
+            return connectionString + separator + "TrustServerCertificate=True;";
         }
 
         /// <summary>
