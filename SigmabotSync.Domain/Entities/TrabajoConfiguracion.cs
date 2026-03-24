@@ -33,14 +33,8 @@ namespace SigmabotSync.Domain.Entities
         /// <summary>Ruta base para extracción de archivos (desde TrabajosConfiguracion Nombre=BasePath).</summary>
         public string BasePath { get; set; }
 
-        /// <summary>Nombre de la tabla de metadata en la BD (desde TrabajosConfiguracion Nombre=TablaMetadata). Usado en FileUploadWithMetadata.</summary>
+        /// <summary>Nombre de la tabla de metadata en la BD (desde TrabajosConfiguracion Nombre=TablaMetadata). FileUploadWithMetadata requiere columna <c>NombreArchivo</c> (archivo en BasePath).</summary>
         public string TablaMetadata { get; set; }
-
-        /// <summary>DocumentTypeId por defecto para Register Document en Aconex (desde TrabajosConfiguracion Nombre=DocumentTypeIdDefault). Opcional si la tabla de metadata tiene DocumentTypeId.</summary>
-        public string DocumentTypeIdDefault { get; set; }
-
-        /// <summary>DocumentStatusId por defecto para Register Document en Aconex (desde TrabajosConfiguracion Nombre=DocumentStatusIdDefault). Opcional si la tabla de metadata tiene DocumentStatusId.</summary>
-        public string DocumentStatusIdDefault { get; set; }
 
         /// <summary>Id de la credencial Aconex en tabla Credenciales (desde TrabajosConfiguracion Nombre=CredencialAconex).</summary>
         public int? CredencialAconexId { get; set; }
