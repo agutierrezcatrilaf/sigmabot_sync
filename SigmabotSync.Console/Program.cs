@@ -7,6 +7,7 @@ using SigmabotSync.Infrastructure.External;
 using SigmabotSync.Infrastructure.Services;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace SigmabotSync.Console
@@ -27,7 +28,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 3;
+        private static readonly int? DebugIdTrabajo = 4;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -233,7 +234,7 @@ namespace SigmabotSync.Console
                 SigmabotSync.Application.Common.Utilities.Wlog("Stack Trace: " + ex.StackTrace, 0);
 
                 mensajeError = ex.Message;
-                detalleError = ex.StackTrace;
+                detalleError = FormatearDetalleEjecucionParaHistorial(ex);
                 GuardarResultadoTrabajo(connectionString, idTrabajo, exito: false, ex.Message);
             }
             finally
@@ -250,6 +251,42 @@ namespace SigmabotSync.Console
                         exito ? null : detalleError);
                 }
             }
+        }
+
+        /// <summary>
+        /// Texto legible para <c>TrabajosEjecucion.DetalleEjecucion</c>: tipo y mensajes (incl. internos o agregados), sin rutas de archivo ni stack trace.
+        /// El stack trace completo sigue yendo al log en consola/archivo.
+        /// </summary>
+        private static string FormatearDetalleEjecucionParaHistorial(Exception ex)
+        {
+            if (ex == null) return null;
+
+            var sb = new StringBuilder();
+
+            if (ex is AggregateException agg)
+            {
+                sb.Append(agg.GetType().Name).Append(": ").AppendLine(agg.Message ?? "");
+                int i = 0;
+                foreach (Exception inner in agg.Flatten().InnerExceptions)
+                {
+                    i++;
+                    sb.Append("  [").Append(i).Append("] ").Append(inner.GetType().Name).Append(": ").AppendLine(inner.Message ?? "");
+                }
+                return sb.ToString().TrimEnd();
+            }
+
+            Exception e = ex;
+            bool first = true;
+            while (e != null)
+            {
+                if (!first)
+                    sb.AppendLine().Append("Causa interna: ");
+                sb.Append(e.GetType().Name).Append(": ").Append(e.Message ?? "");
+                e = e.InnerException;
+                first = false;
+            }
+
+            return sb.ToString();
         }
 
         /// <summary>Comprueba si el trabajo tiene una ejecución en curso (FechaHoraFin NULL) para no lanzar duplicados.</summary>
@@ -531,7 +568,7 @@ namespace SigmabotSync.Console
         }
 
         /// <summary>
-        /// Ejecuta FileUploadWithMetadata: lee tabla de metadata (CredencialBD + TablaMetadata), enlaza archivos en BasePath por docno y envía a Aconex.
+        /// Ejecuta FileUploadWithMetadata: lee tabla de metadata (CredencialBD + TablaMetadata), enlaza archivos en BasePath por NombreArchivo y envía a Aconex.
         /// </summary>
         private static async Task EjecutarFileUploadWithMetadataAsync(
             TrabajoConfiguracion trabajoConfig,
