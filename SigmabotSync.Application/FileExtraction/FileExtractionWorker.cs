@@ -1,14 +1,11 @@
-using Newtonsoft.Json;
 using SigmabotSync.Application.Common;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Models.Extraction;
+using SigmabotSync.Domain.Ports;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,7 +15,7 @@ namespace SigmabotSync.Application.FileExtraction
     /// <summary>
     /// Worker para extracción de archivos de documentos desde Aconex
     /// </summary>
-    public class FileExtractionWorker
+    public class FileExtractionWorker : IDisposable
     {
         private const int MaxConcurrentDownloads = 6;
 
@@ -33,8 +30,8 @@ namespace SigmabotSync.Application.FileExtraction
         };
 
         private readonly FileExtractionConfig _config;
-        private readonly HttpClient _httpClient;
-        private readonly HttpClient _downloadClient;
+        private readonly IAconexRegisterSearchPort _searchPort;
+        private readonly IAconexRegisterDocumentContentPort _contentPort;
 
         private int _countSaved;
         private int _countOmittedNoDocument;  // sin filename o documento vacio (CANNOT_DOWNLOAD_EMPTY_DOCUMENT)
@@ -46,26 +43,14 @@ namespace SigmabotSync.Application.FileExtraction
 
         private enum FileDownloadResult { Saved, Omitted, Error }
 
-        public FileExtractionWorker(FileExtractionConfig config)
+        public FileExtractionWorker(
+            FileExtractionConfig config,
+            IAconexRegisterSearchPort searchPort,
+            IAconexRegisterDocumentContentPort contentPort)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromMinutes(10)
-            };
-
-            // Mismo esquema que DocumentExtractionWorker (solo Authorization; sin X-Application-Key) para que el search no devuelva 401
-            _httpClient.DefaultRequestHeaders.Add("Authorization", "Basic " + _config.AuthorizationHeader);
-            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
-
-            // Cliente compartido para descargas (reutilizable, evita agotar sockets)
-            var downloadHandler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
-            _downloadClient = new HttpClient(downloadHandler)
-            {
-                Timeout = TimeSpan.FromMinutes(10)
-            };
-            _downloadClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _config.AuthorizationHeader);
-            _downloadClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, sdch");
+            _searchPort = searchPort ?? throw new ArgumentNullException(nameof(searchPort));
+            _contentPort = contentPort ?? throw new ArgumentNullException(nameof(contentPort));
         }
 
         /// <summary>
@@ -158,7 +143,6 @@ namespace SigmabotSync.Application.FileExtraction
         private async Task<Rootobject> GetPageAsync(int pageNumber)
         {
             string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
-            string uri = $"{baseUrl}/api/projects/{_config.ProjectId}/register/search";
 
             // Respetar CamposConsulta de TrabajosConfiguracion (_config.ReturnFields),
             // pero garantizando siempre los mínimos que FileExtraction necesita.
@@ -169,33 +153,22 @@ namespace SigmabotSync.Application.FileExtraction
                     fields.Add(campo);
             }
 
-            var requestBody = new
-            {
-                orgId = _config.OrgId,
-                userId = _config.UserId,
-                returnFields = fields,
-                resultSize = _config.ResultSize.ToString(),
-                showDocHistory = "true",
-                pageNumber = pageNumber.ToString()
-            };
-
-            string jsonBody = JsonConvert.SerializeObject(requestBody);
             try
             {
-                using (var content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
-                {
-                    var response = await Utilities.EjecutarConReintentosAsync(
-                        async () => await _httpClient.PostAsync(uri, content),
-                        $"FileExtraction: Error al obtener página {pageNumber}"
-                    );
-
-                    response.EnsureSuccessStatusCode();
-
-                    string responseString = await response.Content.ReadAsStringAsync();
-                    responseString = responseString.Replace("\u0003", ""); // Limpiar caracteres especiales
-
-                    return JsonConvert.DeserializeObject<Rootobject>(responseString);
-                }
+                return await Utilities.EjecutarConReintentosAsync(
+                    async () => await _searchPort.SearchRegisterPageAsync(
+                        baseUrl,
+                        _config.ProjectId,
+                        _config.OrgId,
+                        _config.UserId,
+                        _config.AuthorizationHeader,
+                        fields,
+                        _config.ResultSize,
+                        pageNumber,
+                        throwIfNotSuccess: true,
+                        CancellationToken.None),
+                    $"FileExtraction: Error al obtener página {pageNumber}"
+                );
             }
             catch (Exception ex)
             {
@@ -262,39 +235,37 @@ namespace SigmabotSync.Application.FileExtraction
                 Directory.CreateDirectory(documentPath);
 
                 string baseUrl = string.IsNullOrWhiteSpace(_config.AconexBaseUrl) ? "https://us1.aconex.com" : _config.AconexBaseUrl.TrimEnd('/');
-                string downloadUrl = $"{baseUrl}/api/projects/{_config.ProjectId}/register/{documentId}";
 
+                var result = await _contentPort.DownloadToFileAsync(
+                    baseUrl,
+                    _config.ProjectId,
+                    documentId,
+                    filePath,
+                    _config.AuthorizationHeader,
+                    CancellationToken.None);
 
-                using (var response = await _downloadClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+                switch (result.Status)
                 {
-                    if (response.StatusCode == HttpStatusCode.BadRequest)
-                    {
-                        var errorBody = await response.Content.ReadAsStringAsync();
-                        if (errorBody != null && errorBody.IndexOf("CANNOT_DOWNLOAD_EMPTY_DOCUMENT", StringComparison.OrdinalIgnoreCase) >= 0)
+                    case AconexRegisterDocumentDownloadStatus.Saved:
+                        Interlocked.Increment(ref _countSaved);
+                        return FileDownloadResult.Saved;
+                    case AconexRegisterDocumentDownloadStatus.OmittedEmptyDocument:
+                        Interlocked.Increment(ref _countOmittedNoDocument);
+                        return FileDownloadResult.Omitted;
+                    default:
+                        if (!string.IsNullOrEmpty(result.Message))
                         {
-                            Interlocked.Increment(ref _countOmittedNoDocument);
-                            return FileDownloadResult.Omitted;
+                            if (result.Message.IndexOf("Timeout", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                result.Message.IndexOf("cancelación", StringComparison.OrdinalIgnoreCase) >= 0)
+                                Utilities.Wlog($"FileExtraction: Timeout o cancelación al descargar documento {document.Id} (DocNo={document.DocumentNumber}). Se omite y se continúa.", 0);
+                            else
+                                Utilities.Wlog($"FileExtraction: ERROR descargando archivo del documento {document.Id}: {result.Message}", 0);
                         }
-                    }
-
-                    response.EnsureSuccessStatusCode();
-
-                    using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        var contentStream = await response.Content.ReadAsStreamAsync();
-                        await contentStream.CopyToAsync(fileStream);
-                    }
+                        else
+                            Utilities.Wlog($"FileExtraction: ERROR descargando archivo del documento {document.Id}", 0);
+                        Interlocked.Increment(ref _countErrors);
+                        return FileDownloadResult.Error;
                 }
-
-                Interlocked.Increment(ref _countSaved);
-                return FileDownloadResult.Saved;
-            }
-            catch (OperationCanceledException)
-            {
-                // Incluye TaskCanceledException (timeout de HttpClient o CancellationToken).
-                Utilities.Wlog($"FileExtraction: Timeout o cancelación al descargar documento {document.Id} (DocNo={document.DocumentNumber}). Se omite y se continúa.", 0);
-                Interlocked.Increment(ref _countErrors);
-                return FileDownloadResult.Error;
             }
             catch (Exception ex)
             {
@@ -309,8 +280,8 @@ namespace SigmabotSync.Application.FileExtraction
         /// </summary>
         public void Dispose()
         {
-            _httpClient?.Dispose();
-            _downloadClient?.Dispose();
+            (_searchPort as IDisposable)?.Dispose();
+            (_contentPort as IDisposable)?.Dispose();
         }
     }
 }

@@ -3,6 +3,7 @@ using SigmabotSync.Application.FileExtraction;
 using SigmabotSync.Application.Synchronization;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Domain.Ports;
 using SigmabotSync.Infrastructure.External;
 using SigmabotSync.Infrastructure.Services;
 using System;
@@ -28,7 +29,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 4;
+        private static readonly int? DebugIdTrabajo = 6;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -419,26 +420,28 @@ namespace SigmabotSync.Console
             if (returnFields != null && returnFields.Count > 0)
                 config.ReturnFields = returnFields;
 
-            // Crear worker
-            var worker = new FileExtractionWorker(config);
-
-            // Configurar eventos
-            worker.OnProgress += (current, total) =>
+            using (var searchPort = new AconexRegisterSearchAdapter())
+            using (var contentPort = new AconexRegisterDocumentContentAdapter())
+            using (var worker = new FileExtractionWorker(config, searchPort, contentPort))
             {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Página {current} de {total} ({(current * 100 / total)}%)", 0);
-            };
+                // Configurar eventos
+                worker.OnProgress += (current, total) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Página {current} de {total} ({(current * 100 / total)}%)", 0);
+                };
 
-            worker.OnStatus += (status) =>
-            {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
-            };
+                worker.OnStatus += (status) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
+                };
 
-            SigmabotSync.Application.Common.Utilities.Wlog("Iniciando extracción de archivos...", 0);
-            SigmabotSync.Application.Common.Utilities.Wlog("", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("Iniciando extracción de archivos...", 0);
+                SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
-            // Ejecutar extracción de archivos (Aconex) — descarga de documentos
-            await worker.ProcessAllPagesAsync();
-            etapasEjecutadas.Add("FileExtraction");
+                // Ejecutar extracción de archivos (Aconex) — descarga de documentos
+                await worker.ProcessAllPagesAsync();
+                etapasEjecutadas.Add("FileExtraction");
+            }
         }
 
         /// <summary>
@@ -469,8 +472,11 @@ namespace SigmabotSync.Console
                     documentFieldMappings
                 );
 
-                var docWorker = new DocumentExtractionWorker(docConfig.ToDictionary(), connectionStringDocs);
-                docWorker.Documentos(projectId);
+                using (var registerSearchPort = new AconexRegisterSearchAdapter())
+                {
+                    var docWorker = new DocumentExtractionWorker(docConfig.ToDictionary(), connectionStringDocs, registerSearchPort);
+                    docWorker.Documentos(projectId);
+                }
 
                 SigmabotSync.Application.Common.Utilities.Wlog("Sincronización de documentos completada.", 0);
                 etapasEjecutadas.Add("DocumentExtraction");
@@ -498,24 +504,28 @@ namespace SigmabotSync.Console
             SigmabotSync.Application.Common.Utilities.Wlog($"  IdProyecto={projectId}, Since={since:yyyy-MM-dd HH:mm:ss} UTC", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
-            var client = new AconexDocumentClient(
+            var aconexDocumentClient = new AconexDocumentClient(
                 credAconex.Aconex_Usuario ?? "",
                 credAconex.Aconex_Clave ?? "",
                 credAconex.Aconex_IntegrationId ?? "");
-            var documentService = new DocumentService(client);
-            var syncWorker = new DocumentSyncWorker(documentService);
-
-            syncWorker.OnProgress += (current, total) =>
+            IDocumentSyncReadPort documentSyncRead = new AconexDocumentSyncAdapter(aconexDocumentClient);
+            using (var registerWritePort = new AconexRegisterWriteAdapter())
             {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Documento {current} de {total}", 0);
-            };
-            syncWorker.OnStatus += (status) =>
-            {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
-            };
+                var documentService = new DocumentService(documentSyncRead, registerWritePort);
+                var syncWorker = new DocumentSyncWorker(documentService);
 
-            await syncWorker.RunAsync(projectId, since);
-            etapasEjecutadas.Add("ProjectSync");
+                syncWorker.OnProgress += (current, total) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Documento {current} de {total}", 0);
+                };
+                syncWorker.OnStatus += (status) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
+                };
+
+                await syncWorker.RunAsync(projectId, since);
+                etapasEjecutadas.Add("ProjectSync");
+            }
         }
 
         /// <summary>
@@ -544,25 +554,29 @@ namespace SigmabotSync.Console
                 documentFieldMappings);
             var configDict = docConfig.ToDictionary();
 
-            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Documentos...", 0);
-            var docWorker = new DocumentExtractionWorker(configDict, connectionStringDocs);
-            docWorker.Documentos(projectId);
-            etapasEjecutadas.Add("Documentos");
+            using (var registerSearchPort = new AconexRegisterSearchAdapter())
+            using (var httpGetPort = new AconexHttpGetAdapter())
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Documentos...", 0);
+                var docWorker = new DocumentExtractionWorker(configDict, connectionStringDocs, registerSearchPort);
+                docWorker.Documentos(projectId);
+                etapasEjecutadas.Add("Documentos");
 
-            //System.Console.WriteLine("FullExtraction: ProcessIncidents...");
-            //var incidentWorker = new IncidentExtractionWorker(configDict, connectionStringDocs);
-            //incidentWorker.ProcessIncidents(projectId);
-            //etapasEjecutadas.Add("ProcessIncidents");
+                //SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: ProcessIncidents...", 0);
+                //var incidentWorker = new IncidentExtractionWorker(configDict, connectionStringDocs, httpGetPort);
+                //incidentWorker.ProcessIncidents(projectId);
+                //etapasEjecutadas.Add("ProcessIncidents");
 
-            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Correos...", 0);
-            var mailWorker = new MailExtractionWorker(configDict, connectionStringDocs);
-            mailWorker.Correos(projectId);
-            etapasEjecutadas.Add("Correos");
+                SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: Correos...", 0);
+                var mailWorker = new MailExtractionWorker(configDict, connectionStringDocs, httpGetPort);
+                mailWorker.Correos(projectId);
+                etapasEjecutadas.Add("Correos");
 
-            SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: FlujosdeTrabajo...", 0);
-            var workflowWorker = new WorkflowExtractionWorker(configDict, connectionStringDocs);
-            workflowWorker.FlujosdeTrabajo(projectId);
-            etapasEjecutadas.Add("FlujosdeTrabajo");
+                SigmabotSync.Application.Common.Utilities.Wlog("FullExtraction: FlujosdeTrabajo...", 0);
+                var workflowWorker = new WorkflowExtractionWorker(configDict, connectionStringDocs, httpGetPort);
+                workflowWorker.FlujosdeTrabajo(projectId);
+                etapasEjecutadas.Add("FlujosdeTrabajo");
+            }
 
             await Task.CompletedTask;
         }
@@ -587,18 +601,21 @@ namespace SigmabotSync.Console
             SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre}", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
-            var worker = new FileUploadWithMetadataWorker(trabajoConfig, credAconex, credBd);
-            worker.OnProgress += (current, total) =>
+            using (var registerWritePort = new AconexRegisterWriteAdapter())
             {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] {current} de {total}", 0);
-            };
-            worker.OnStatus += (status) =>
-            {
-                SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
-            };
+                var worker = new FileUploadWithMetadataWorker(trabajoConfig, credAconex, credBd, registerWritePort);
+                worker.OnProgress += (current, total) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] {current} de {total}", 0);
+                };
+                worker.OnStatus += (status) =>
+                {
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
+                };
 
-            await worker.RunAsync();
-            etapasEjecutadas.Add("FileUploadWithMetadata");
+                await worker.RunAsync();
+                etapasEjecutadas.Add("FileUploadWithMetadata");
+            }
         }
 
         /// <summary>

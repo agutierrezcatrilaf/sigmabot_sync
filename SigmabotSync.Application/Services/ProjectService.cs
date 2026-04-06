@@ -1,36 +1,23 @@
-﻿using SigmabotSync.Domain.Entities;
+using SigmabotSync.Domain.Entities;
 using SigmabotSync.Domain.Interfaces;
-using SigmabotSync.Infrastructure.External;
-using SigmabotSync.Infrastructure.Services;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace SigmabotSync.Application.Services
 {
-    public class ProjectService
+    public class ProjectService : IProjectService
     {
-        private readonly SettingsService _settings;
+        private readonly IExternalApiClient _apiClient;
 
-        public ProjectService(SettingsService settings)
+        public ProjectService(IExternalApiClient apiClient)
         {
-            _settings = settings;
+            _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         }
 
-        public async Task<List<Project>> GetProjectsAsync()
+        public Task<List<Project>> GetProjectsAsync()
         {
-            var cfg = _settings.Load();
-
-            var client = new AconexProjectClient(
-                cfg.UserAconex,
-                cfg.PassAconex,
-                cfg.IntegrationIdAconex
-            );
-
-            return await client.GetUserProjectsAsync();
+            return _apiClient.GetProjectsAsync();
         }
     }
-
 }

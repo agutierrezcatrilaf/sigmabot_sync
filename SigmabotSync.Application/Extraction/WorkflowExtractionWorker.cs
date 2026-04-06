@@ -1,4 +1,5 @@
 using SigmabotSync.Domain.Models.Extraction;
+using SigmabotSync.Domain.Ports;
 using SigmabotSync.Application.Common;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,8 @@ namespace SigmabotSync.Application.Extraction
 {
     public class WorkflowExtractionWorker
     {
+        private const string LegacyWorkflowApplicationKey = "a7f7bf46-a848-4b7a-ae8c-ed55b3952010";
+
         public Dictionary<string, MemProject> MemProjects { get; private set; }
         public Dictionary<string, bool> MemUsers { get; private set; }
 
@@ -35,11 +38,13 @@ namespace SigmabotSync.Application.Extraction
 
         private Dictionary<string, string> _config;
         private readonly SqlConnection _dbConWorkflow;
+        private readonly IAconexHttpGetPort _httpGet;
 
-        public WorkflowExtractionWorker(Dictionary<string, string> config, string connectionString)
+        public WorkflowExtractionWorker(Dictionary<string, string> config, string connectionString, IAconexHttpGetPort httpGet)
         {
             _config = config;
             _dbConWorkflow = new SqlConnection(connectionString);
+            _httpGet = httpGet ?? throw new ArgumentNullException(nameof(httpGet));
         }
 
         public void FlujosdeTrabajo(string proyectID)
@@ -304,30 +309,26 @@ namespace SigmabotSync.Application.Extraction
 
             try
             {
-                WebRequest request = WebRequest.Create($"https://us1.aconex.com/api/projects/{projid}/directory?");
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-
-                using (WebResponse response = request.GetResponse())
-                using (Stream dataStream = response.GetResponseStream())
-                using (StreamReader reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
+                    Url = $"https://us1.aconex.com/api/projects/{projid}/directory?",
+                    AuthorizationHeaderBase64 = authcode,
+                    ExtraHeaders = new[] { ("X-Application-Key", LegacyWorkflowApplicationKey) }
+                }).GetAwaiter().GetResult();
 
-                    XmlDocument doc = new XmlDocument();
-                    doc.LoadXml(responseFromServer);
+                XmlDocument doc = new XmlDocument();
+                doc.LoadXml(responseFromServer);
 
-                    foreach (XmlElement user in doc.GetElementsByTagName("Directory"))
+                foreach (XmlElement user in doc.GetElementsByTagName("Directory"))
+                {
+                    if (user["SearchResultType"]?.InnerText == "USER_TYPE")
                     {
-                        if (user["SearchResultType"]?.InnerText == "USER_TYPE")
-                        {
-                            string userid = user["UserId"]?.InnerText ?? "";
-                            memUserByProject.Add(userid);
+                        string userid = user["UserId"]?.InnerText ?? "";
+                        memUserByProject.Add(userid);
 
-                            if (!dbUserExists(userid))
-                            {
-                                dbUserToDbTmp(user); // M�todo existente que debe aceptar XmlElement
-                            }
+                        if (!dbUserExists(userid))
+                        {
+                            dbUserToDbTmp(user); // M�todo existente que debe aceptar XmlElement
                         }
                     }
                 }
@@ -627,35 +628,25 @@ namespace SigmabotSync.Application.Extraction
 
             try
             {
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-                request.Accept = "application/vnd.aconex.workflow.v1+xml";
-
-                using (var response = request.GetResponse())
-                using (var dataStream = response.GetResponseStream())
-                using (var reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
-                    responseFromServer = responseFromServer.Replace(((char)3).ToString(), "");
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authcode,
+                    Accept = "application/vnd.aconex.workflow.v1+xml",
+                    ExtraHeaders = new[] { ("X-Application-Key", LegacyWorkflowApplicationKey) }
+                }).GetAwaiter().GetResult();
 
-                    var doc = new XmlDocument();
-                    doc.LoadXml(responseFromServer);
+                var doc = new XmlDocument();
+                doc.LoadXml(responseFromServer);
 
-                    long tresult = Convert.ToInt64(doc.SelectSingleNode("WorkflowSearch").Attributes["TotalResults"].InnerText);
-                    Utilities.Wlog("Flujos: Pasos de Flujo de Trabajo a procesar:" + tresult, 1);
+                long tresult = Convert.ToInt64(doc.SelectSingleNode("WorkflowSearch").Attributes["TotalResults"].InnerText);
+                Utilities.Wlog("Flujos: Pasos de Flujo de Trabajo a procesar:" + tresult, 1);
 
-                    AppState.totPasosFlujosAconex = tresult;
+                AppState.totPasosFlujosAconex = tresult;
 
-                    if (tresult > 0)
-                    {
-                        return Convert.ToInt64(doc.SelectSingleNode("WorkflowSearch").Attributes["TotalPages"].InnerText);
-                    }
-                    else
-                    {
-                        return 0;
-                    }
-                }
+                if (tresult > 0)
+                    return Convert.ToInt64(doc.SelectSingleNode("WorkflowSearch").Attributes["TotalPages"].InnerText);
+                return 0;
             }
             catch (Exception ex)
             {
@@ -675,32 +666,27 @@ namespace SigmabotSync.Application.Extraction
 
             try
             {
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-                request.Accept = "application/vnd.aconex.workflow.v1+xml";
-
-                using (var response = request.GetResponse())
-                using (var dataStream = response.GetResponseStream())
-                using (var reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
-                    responseFromServer = responseFromServer.Replace(((char)3).ToString(), "");
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authcode,
+                    Accept = "application/vnd.aconex.workflow.v1+xml",
+                    ExtraHeaders = new[] { ("X-Application-Key", LegacyWorkflowApplicationKey) }
+                }).GetAwaiter().GetResult();
 
-                    var doc = new XmlDocument();
-                    doc.LoadXml(responseFromServer);
+                var doc = new XmlDocument();
+                doc.LoadXml(responseFromServer);
 
-                    XmlNodeList workflows = doc.SelectSingleNode("WorkflowSearch")
-                                               .SelectSingleNode("SearchResults")
-                                               .SelectNodes("Workflow");
+                XmlNodeList workflows = doc.SelectSingleNode("WorkflowSearch")
+                                           .SelectSingleNode("SearchResults")
+                                           .SelectNodes("Workflow");
 
-                    foreach (XmlElement wfs in workflows)
-                    {
-                        string wfNumber = wfs.SelectSingleNode("WorkflowNumber").InnerText;
-                        string wfId = wfs.GetAttribute("WorkflowId");
+                foreach (XmlElement wfs in workflows)
+                {
+                    string wfNumber = wfs.SelectSingleNode("WorkflowNumber").InnerText;
+                    string wfId = wfs.GetAttribute("WorkflowId");
 
-                        AgregaPasoFlujo(wfs, projid);
-                    }
+                    AgregaPasoFlujo(wfs, projid);
                 }
             }
             catch (Exception ex)

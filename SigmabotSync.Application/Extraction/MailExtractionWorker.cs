@@ -1,4 +1,5 @@
 using SigmabotSync.Domain.Models.Extraction;
+using SigmabotSync.Domain.Ports;
 using SigmabotSync.Application.Common;
 using System;
 using System.Collections.Concurrent;
@@ -19,8 +20,12 @@ namespace SigmabotSync.Application.Extraction
 {
     public class MailExtractionWorker
     {
+        /// <summary>Misma clave que el código histórico para GET con adjuntos y páginas (no usada en GetMaxPages).</summary>
+        private const string LegacyMailApplicationKey = "a7f7bf46-a848-4b7a-ae8c-ed55b3952010";
+
         private Dictionary<string, string> _config;
         private readonly SqlConnection _dbConMails;
+        private readonly IAconexHttpGetPort _httpGet;
 
         private DataTable DestinatariosTmp = new DataTable();
         private DataTable CorreosRecibidosTmp = new DataTable();
@@ -44,10 +49,11 @@ namespace SigmabotSync.Application.Extraction
         private string _fechaInicio;
         private string _fechaFin;
 
-        public MailExtractionWorker(Dictionary<string, string> config, string connectionString)
+        public MailExtractionWorker(Dictionary<string, string> config, string connectionString, IAconexHttpGetPort httpGet)
         {
             _config = config;
             _dbConMails = new SqlConnection(connectionString);
+            _httpGet = httpGet ?? throw new ArgumentNullException(nameof(httpGet));
         }
 
         public void Correos(string proyectID)
@@ -202,38 +208,32 @@ namespace SigmabotSync.Application.Extraction
 
             try
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-                request.ContentType = "application/vnd.aconex.mail.v3+xml";
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                //request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-                request.Accept = "application/xml";
-
-                using (WebResponse response = request.GetResponse())
-                using (Stream dataStream = response.GetResponseStream())
-                using (StreamReader reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authcode,
+                    Accept = "application/xml",
+                    ContentType = "application/vnd.aconex.mail.v3+xml",
+                    ExtraHeaders = null
+                }).GetAwaiter().GetResult();
 
-                    XmlDocument doc = new XmlDocument();
-                    doc.LoadXml(responseFromServer);
+                XmlDocument doc = new XmlDocument();
+                doc.LoadXml(responseFromServer);
 
-                    long tresult = long.Parse(doc.SelectSingleNode("MailSearch")?.Attributes?["TotalResults"]?.InnerText ?? "0");
+                long tresult = long.Parse(doc.SelectSingleNode("MailSearch")?.Attributes?["TotalResults"]?.InnerText ?? "0");
 
-                    if (mailbox == "inbox")
-                        AppState.totalCorreosRecibidosAconex = tresult;
-                    else
-                        AppState.totalCorreosEnviadosAconex = tresult;
+                if (mailbox == "inbox")
+                    AppState.totalCorreosRecibidosAconex = tresult;
+                else
+                    AppState.totalCorreosEnviadosAconex = tresult;
 
-                    if (tresult > 0)
-                    {
-                        long totalPages = long.Parse(doc.SelectSingleNode("MailSearch")?.Attributes?["TotalPages"]?.InnerText ?? "0");
-                        return totalPages;
-                    }
-                    else
-                    {
-                        return 0;
-                    }
+                if (tresult > 0)
+                {
+                    long totalPages = long.Parse(doc.SelectSingleNode("MailSearch")?.Attributes?["TotalPages"]?.InnerText ?? "0");
+                    return totalPages;
                 }
+
+                return 0;
             }
             catch (Exception ex)
             {
@@ -548,51 +548,45 @@ namespace SigmabotSync.Application.Extraction
 
             Utilities.EjecutarConReintentos(() =>
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-                request.ContentType = "application/vnd.aconex.mail.v3+xml";
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-                request.Accept = "application/xml";
-
-                using (WebResponse response = request.GetResponse())
+                string responseXml = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    using (Stream dataStream = response.GetResponseStream())
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authcode,
+                    Accept = "application/xml",
+                    ContentType = "application/vnd.aconex.mail.v3+xml",
+                    ExtraHeaders = new[] { ("X-Application-Key", LegacyMailApplicationKey) }
+                }).GetAwaiter().GetResult();
+
+                XmlDocument docAdj = new XmlDocument();
+                docAdj.LoadXml(Utilities.CleanXml(responseXml));
+
+                XmlNodeList attachments = docAdj.SelectSingleNode("Mail")?
+                                                .SelectSingleNode("Attachments")?
+                                                .SelectNodes("RegisteredDocumentAttachment");
+                if (attachments != null)
+                {
+                    foreach (XmlElement adoc in attachments)
                     {
-                        using (StreamReader reader = new StreamReader(dataStream))
+                        var adjunto = new DocumentoDto
                         {
-                            string responseXml = reader.ReadToEnd().Replace(((char)3).ToString(), "");
-                            XmlDocument docAdj = new XmlDocument();
-                            docAdj.LoadXml(Utilities.CleanXml(responseXml));
+                            ACXProjectId = projectId,
+                            MailId = mailId,
+                            DocumentNo = adoc.SelectSingleNode("DocumentNo")?.InnerText ?? "",
+                            FileName = adoc.SelectSingleNode("FileName")?.InnerText ?? "",
+                            FileSize = adoc.SelectSingleNode("FileSize")?.InnerText ?? "0",
+                            Revision = adoc.SelectSingleNode("Revision")?.InnerText ?? "",
+                            RevisionDate = adoc.SelectSingleNode("RevisionDate")?.InnerText ?? "",
+                            Title = adoc.SelectSingleNode("Title")?.InnerText ?? ""
+                        };
 
-                            XmlNodeList attachments = docAdj.SelectSingleNode("Mail")?
-                                                            .SelectSingleNode("Attachments")?
-                                                            .SelectNodes("RegisteredDocumentAttachment");
-                            if (attachments != null)
-                            {
-                                foreach (XmlElement adoc in attachments)
-                                {
-                                    var adjunto = new DocumentoDto
-                                    {
-                                        ACXProjectId = projectId,
-                                        MailId = mailId,
-                                        DocumentNo = adoc.SelectSingleNode("DocumentNo")?.InnerText ?? "",
-                                        FileName = adoc.SelectSingleNode("FileName")?.InnerText ?? "",
-                                        FileSize = adoc.SelectSingleNode("FileSize")?.InnerText ?? "0",
-                                        Revision = adoc.SelectSingleNode("Revision")?.InnerText ?? "",
-                                        RevisionDate = adoc.SelectSingleNode("RevisionDate")?.InnerText ?? "",
-                                        Title = adoc.SelectSingleNode("Title")?.InnerText ?? ""
-                                    };
-
-                                    if (mailbox == "inbox")
-                                        _bagDocumentosRecibidos.Add(adjunto);
-                                    else
-                                        _bagDocumentosEnviados.Add(adjunto);
-                                }
-                            }
-                        }
+                        if (mailbox == "inbox")
+                            _bagDocumentosRecibidos.Add(adjunto);
+                        else
+                            _bagDocumentosEnviados.Add(adjunto);
                     }
-                    return true;
                 }
+
+                return true;
             }, $"ObtenerAdjuntos {projectId}/{mailId}");
         }
 
@@ -606,22 +600,14 @@ namespace SigmabotSync.Application.Extraction
 
             return Utilities.EjecutarConReintentos(() =>
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-                request.ContentType = "application/vnd.aconex.mail.v3+xml";
-                request.Headers.Add("Authorization", "Basic " + authcode);
-                request.Headers.Add("X-Application-Key", "a7f7bf46-a848-4b7a-ae8c-ed55b3952010");
-                request.Accept = "application/xml";
-
-                using (WebResponse response = request.GetResponse())
+                return _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    using (Stream dataStream = response.GetResponseStream())
-                    {
-                        using (StreamReader reader = new StreamReader(dataStream))
-                        {
-                            return reader.ReadToEnd().Replace(((char)3).ToString(), "");
-                        }
-                    }
-                }
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authcode,
+                    Accept = "application/xml",
+                    ContentType = "application/vnd.aconex.mail.v3+xml",
+                    ExtraHeaders = new[] { ("X-Application-Key", LegacyMailApplicationKey) }
+                }).GetAwaiter().GetResult();
             }, $"GetPageXml {projid}/{mailbox}/p�g {page}");
         }
 

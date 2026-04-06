@@ -1,4 +1,5 @@
 using SigmabotSync.Domain.Models.Extraction;
+using SigmabotSync.Domain.Ports;
 using SigmabotSync.Application.Common;
 using Newtonsoft.Json;
 using System;
@@ -18,16 +19,18 @@ namespace SigmabotSync.Application.Extraction
     {
         private readonly Dictionary<string, string> _config;
         private readonly SqlConnection _dbConField;
+        private readonly IAconexHttpGetPort _httpGet;
 
         public static DataTable Areastmp;
         public static DataTable Incidentestmp;
         private Dictionary<string, string> mCustomFields;
 
 
-        public IncidentExtractionWorker(Dictionary<string, string> config, string connectionString)
+        public IncidentExtractionWorker(Dictionary<string, string> config, string connectionString, IAconexHttpGetPort httpGet)
         {
             _config = config;
             _dbConField = new SqlConnection(connectionString);
+            _httpGet = httpGet ?? throw new ArgumentNullException(nameof(httpGet));
         }
         public void ProcessIncidents(string proyectID)
         {
@@ -132,30 +135,26 @@ namespace SigmabotSync.Application.Extraction
                 string authCode = Utilities.EncodeTexto(_config["ACXUser"] + ":" + _config["ACXPass"]);
                 string uri = $"https://us1.aconex.com/field-management/api/projects/{projId}/customfields";
 
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.Headers.Add("Authorization", "Basic " + authCode);
-                request.Headers.Add("X-Application", _config["FieldIntegrationId"]);
-                request.Accept = "application/json";
-
-                using (var response = request.GetResponse())
-                using (var dataStream = response.GetResponseStream())
-                using (var reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authCode,
+                    Accept = "application/json",
+                    ExtraHeaders = new[] { ("X-Application", _config["FieldIntegrationId"]) }
+                }).GetAwaiter().GetResult();
 
-                    mCustomFields = new Dictionary<string, string>();
+                mCustomFields = new Dictionary<string, string>();
 
-                    var rst = JsonConvert.DeserializeObject<SystemCustomFields>(responseFromServer);
+                var rst = JsonConvert.DeserializeObject<SystemCustomFields>(responseFromServer);
 
-                    foreach (var cfield in rst.custom_fields)
-                    {
-                        mCustomFields.Add(cfield.id, cfield.label);
-                    }
-
-                    // Campos adicionales manuales
-                    mCustomFields.Add("1353331688026413746", "Empresa Contratista");
-                    mCustomFields.Add("1353331688026413782", "Proceso Afectado");
+                foreach (var cfield in rst.custom_fields)
+                {
+                    mCustomFields.Add(cfield.id, cfield.label);
                 }
+
+                // Campos adicionales manuales
+                mCustomFields.Add("1353331688026413746", "Empresa Contratista");
+                mCustomFields.Add("1353331688026413782", "Proceso Afectado");
             }
             catch (Exception ex)
             {
@@ -172,30 +171,27 @@ namespace SigmabotSync.Application.Extraction
                 string authCode = Utilities.EncodeTexto(_config["ACXUser"] + ":" + _config["ACXPass"]);
                 string uri = $"https://us1.aconex.com/field-management/api/projects/{projId}/areas";
 
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.Headers.Add("Authorization", "Basic " + authCode);
-                request.Headers.Add("X-Application", _config["FieldIntegrationId"]);
-                request.Accept = "application/json";
-
-                using (var response = request.GetResponse())
-                using (var dataStream = response.GetResponseStream())
-                using (var reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
-                    var rst = JsonConvert.DeserializeObject<Areas>(responseFromServer);
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authCode,
+                    Accept = "application/json",
+                    ExtraHeaders = new[] { ("X-Application", _config["FieldIntegrationId"]) }
+                }).GetAwaiter().GetResult();
 
-                    Area root = rst.areas[0];
-                    DataRow row = Areastmp.NewRow();
-                    row["ACXProjectId"] = projId;
-                    row["AreaId"] = root.id;
-                    row["Name"] = root.name;
-                    row["IsRoot"] = true;
-                    Areastmp.Rows.Add(row);
+                var rst = JsonConvert.DeserializeObject<Areas>(responseFromServer);
 
-                    foreach (Area area in root.children)
-                    {
-                        AddArea(projId, area, root.id);
-                    }
+                Area root = rst.areas[0];
+                DataRow row = Areastmp.NewRow();
+                row["ACXProjectId"] = projId;
+                row["AreaId"] = root.id;
+                row["Name"] = root.name;
+                row["IsRoot"] = true;
+                Areastmp.Rows.Add(row);
+
+                foreach (Area area in root.children)
+                {
+                    AddArea(projId, area, root.id);
                 }
             }
             catch (Exception ex)
@@ -243,29 +239,26 @@ namespace SigmabotSync.Application.Extraction
                 string authCode = Utilities.EncodeTexto(_config["ACXUser"] + ":" + _config["ACXPass"]);
                 string uri = $"https://us1.aconex.com/field-management/api/projects/{projId}/areas/{rootId}/issues?include_shared=true&page_number=1&page_size=500";
 
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.Headers.Add("Authorization", "Basic " + authCode);
-                request.Headers.Add("X-Application", _config["FieldIntegrationId"]);
-                request.Accept = "application/vnd.aconex.issues.v2+json";
-
-                using (var response = request.GetResponse())
-                using (var dataStream = response.GetResponseStream())
-                using (var reader = new StreamReader(dataStream))
+                string responseFromServer = _httpGet.GetStringAsync(new AconexHttpGetRequest
                 {
-                    string responseFromServer = reader.ReadToEnd();
-                    var rst = JsonConvert.DeserializeObject<Issues>(responseFromServer);
+                    Url = uri,
+                    AuthorizationHeaderBase64 = authCode,
+                    Accept = "application/vnd.aconex.issues.v2+json",
+                    ExtraHeaders = new[] { ("X-Application", _config["FieldIntegrationId"]) }
+                }).GetAwaiter().GetResult();
 
-                    int totChks = 0;
-                    AppState.totalobs = 0; // Asumimos que totalobs es un campo de clase
+                var rst = JsonConvert.DeserializeObject<Issues>(responseFromServer);
 
-                    foreach (var iss in rst.issues)
-                    {
-                        totChks++;
-                        AddIssue(projId, iss);
-                    }
+                int totChks = 0;
+                AppState.totalobs = 0; // Asumimos que totalobs es un campo de clase
 
-                    AppState.totIncAconex += totChks;
+                foreach (var iss in rst.issues)
+                {
+                    totChks++;
+                    AddIssue(projId, iss);
                 }
+
+                AppState.totIncAconex += totChks;
             }
             catch (Exception ex)
             {

@@ -1,5 +1,6 @@
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Models.Extraction;
+using SigmabotSync.Domain.Ports;
 using SigmabotSync.Application.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -10,8 +11,6 @@ using Microsoft.Data.SqlClient;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,15 +31,20 @@ namespace SigmabotSync.Application.Extraction
         private readonly Dictionary<string, string> _config;
         private readonly SqlConnection _dbConDocs;
         private readonly List<DocumentFieldMapping> _fieldMappings;
+        private readonly IAconexRegisterSearchPort _registerSearchPort;
 
         private DataTable DocumentosTmp;
         private DataTable Metadatatmp;
 
-        public DocumentExtractionWorker(Dictionary<string, string> config, string connectionString)
+        public DocumentExtractionWorker(
+            Dictionary<string, string> config,
+            string connectionString,
+            IAconexRegisterSearchPort registerSearchPort)
         {
             _config = config;
             _dbConDocs = new SqlConnection(connectionString);
             _fieldMappings = GetConfiguredFieldMappings(config);
+            _registerSearchPort = registerSearchPort ?? throw new ArgumentNullException(nameof(registerSearchPort));
         }
 
         /// <summary>Obtiene los mappings desde config (JSON). Si no hay o falla el parse, usa DefaultFieldMappings.</summary>
@@ -247,21 +251,12 @@ namespace SigmabotSync.Application.Extraction
             string baseUrl = _config.ContainsKey("AconexBaseUrl") && !string.IsNullOrWhiteSpace(_config["AconexBaseUrl"])
                 ? _config["AconexBaseUrl"].TrimEnd('/')
                 : "https://us1.aconex.com";
-            string integrationId = _config.ContainsKey("IntegrationIdAconex") ? (_config["IntegrationIdAconex"] ?? "") : "";
-            string uri = $"{baseUrl}/api/projects/{projid}/register/search";
-
-            var client = new HttpClient();
-            client.Timeout = TimeSpan.FromMinutes(10);
-
-            // ?? Configuraci�n de headers (debe ir antes de la primera llamada)
-            client.DefaultRequestHeaders.Add("Authorization", "Basic " + authcode);
-            //client.DefaultRequestHeaders.Add("X-Application-Key", integrationId);
 
             try
             {
                 // --- Obtener la primera p�gina con reintento ---
                 var firstPage = await Utilities.EjecutarConReintentosAsync(
-                    () => GetPageAsync(client, uri, projid, 1),
+                    () => GetPageAsync(projid, 1, authcode, baseUrl),
                     $"Documentos: Error al obtener primera p�gina del proyecto {projid}"
                 );
 
@@ -288,7 +283,7 @@ namespace SigmabotSync.Application.Extraction
                             var pageData = currentPage == 1
                                 ? firstPage
                                 : await Utilities.EjecutarConReintentosAsync(
-                                    () => GetPageAsync(client, uri, projid, currentPage),
+                                    () => GetPageAsync(projid, currentPage, authcode, baseUrl),
                                     $"Documentos: Error al obtener p�gina {currentPage} del proyecto {projid}"
                                   );
 
@@ -333,13 +328,9 @@ namespace SigmabotSync.Application.Extraction
                 Utilities.Wlog($"Documentos: ERROR general en proyecto {projid}: {ex.Message}", 0);
                 return false;
             }
-            finally
-            {
-                client.Dispose(); // ?? aqu� se libera siempre
-            }
         }
 
-        private async Task<Rootobject> GetPageAsync(HttpClient client, string uri, string projid, int page)
+        private async Task<Rootobject> GetPageAsync(string projid, int page, string authcode, string baseUrl)
         {
             // trackingid siempre; el resto según ApiField de los mappings
             var returnFieldList = new List<string> { "trackingid" };
@@ -353,30 +344,17 @@ namespace SigmabotSync.Application.Extraction
             string orgid = _config["OrgId"];
             string userId = _config["userid"];
 
-            var requestBody = new
-            {
-                orgId = orgid,
-                userId = userId,
-                returnFields = returnFields,
-                resultSize = "300",
-                showDocHistory = "true",
-                pageNumber = page.ToString()
-            };
-
-            string postString = JsonConvert.SerializeObject(requestBody);
-
-            var content = new StringContent(postString, Encoding.UTF8, "application/json");
-            var response = await client.PostAsync(uri, content);
-
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var responseString = await response.Content.ReadAsStringAsync();
-            //responseString = responseString.Replace(((char)3).ToString(), "");
-            responseString = responseString.Replace("\u0003", "");
-
-
-            return JsonConvert.DeserializeObject<Rootobject>(responseString);
+            return await _registerSearchPort.SearchRegisterPageAsync(
+                baseUrl,
+                projid,
+                orgid,
+                userId,
+                authcode,
+                returnFields,
+                300,
+                page,
+                throwIfNotSuccess: false,
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         public void AgregaDocumentoNuevo(Searchresult mdoc, string projectId)

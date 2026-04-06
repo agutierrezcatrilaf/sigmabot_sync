@@ -1,14 +1,13 @@
 using SigmabotSync.Application.Common;
 using SigmabotSync.Domain.Config;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Domain.Ports;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Globalization;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,6 +36,7 @@ namespace SigmabotSync.Application.FileExtraction
         private readonly Credencial _credAconex;
         private readonly Credencial _credBd;
         private readonly FileExtractionConfig _aconexConfig;
+        private readonly IAconexRegisterWritePort _registerWritePort;
 
         public event Action<int, int> OnProgress;
         public event Action<string> OnStatus;
@@ -44,11 +44,13 @@ namespace SigmabotSync.Application.FileExtraction
         public FileUploadWithMetadataWorker(
             TrabajoConfiguracion trabajoConfig,
             Credencial credAconex,
-            Credencial credBd)
+            Credencial credBd,
+            IAconexRegisterWritePort registerWritePort)
         {
             _trabajoConfig = trabajoConfig ?? throw new ArgumentNullException(nameof(trabajoConfig));
             _credAconex = credAconex ?? throw new ArgumentNullException(nameof(credAconex));
             _credBd = credBd ?? throw new ArgumentNullException(nameof(credBd));
+            _registerWritePort = registerWritePort ?? throw new ArgumentNullException(nameof(registerWritePort));
             _aconexConfig = FileExtractionConfig.FromCredencial(credAconex, trabajoConfig.IdProyecto ?? "", null);
         }
 
@@ -492,33 +494,31 @@ namespace SigmabotSync.Application.FileExtraction
                 throw new InvalidOperationException("IdProyecto es requerido para Register Document.");
 
             string baseUrl = string.IsNullOrWhiteSpace(_aconexConfig.AconexBaseUrl) ? "https://us1.aconex.com" : _aconexConfig.AconexBaseUrl.TrimEnd('/');
-            string schemaUrl = baseUrl + "/api/projects/" + projectId + "/register/schema";
 
-            using (var client = new HttpClient())
+            string responseText;
+            try
             {
-                client.Timeout = TimeSpan.FromMinutes(2);
-                client.DefaultRequestHeaders.Add("Authorization", "Basic " + _aconexConfig.AuthorizationHeader);
-                if (!string.IsNullOrEmpty(_aconexConfig.IntegrationId))
-                    client.DefaultRequestHeaders.Add("X-Application-Key", _aconexConfig.IntegrationId);
-
-                HttpResponseMessage response = await client.GetAsync(schemaUrl);
-                string responseText = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Utilities.Wlog($"FileUploadWithMetadata: GET register/schema falló. Status={response.StatusCode}, Response={responseText}", 0);
-                    throw new InvalidOperationException($"Aconex register/schema falló: {response.StatusCode}. {responseText}");
-                }
-
-                AconexRegisterSchemaSnapshot snapshot = AconexRegisterSchemaParser.ParseSnapshot(responseText);
-                if (snapshot.Fields == null || snapshot.Fields.Count == 0)
-                {
-                    throw new InvalidOperationException(
-                        "El XML de register/schema no contiene campos en EntityCreationSchemaFields (o no se pudieron leer). Revise la respuesta del endpoint.");
-                }
-
-                return snapshot;
+                responseText = await _registerWritePort.GetRegisterSchemaXmlAsync(
+                    baseUrl,
+                    projectId,
+                    _aconexConfig.AuthorizationHeader,
+                    _aconexConfig.IntegrationId,
+                    default).ConfigureAwait(false);
             }
+            catch (InvalidOperationException ex)
+            {
+                Utilities.Wlog($"FileUploadWithMetadata: GET register/schema falló. {ex.Message}", 0);
+                throw;
+            }
+
+            AconexRegisterSchemaSnapshot snapshot = AconexRegisterSchemaParser.ParseSnapshot(responseText);
+            if (snapshot.Fields == null || snapshot.Fields.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "El XML de register/schema no contiene campos en EntityCreationSchemaFields (o no se pudieron leer). Revise la respuesta del endpoint.");
+            }
+
+            return snapshot;
         }
 
         /// <summary>
@@ -542,46 +542,42 @@ namespace SigmabotSync.Application.FileExtraction
                 metadataRow, columnas, body.FileName, registerSchema, idTipoPorNombre, idEstatusPorNombre);
             Utilities.Wlog("FileUploadWithMetadata: XML Register Document (cuerpo multipart 1): " + xmlDocument, 1);
 
-            const string boundary = "myboundary";
-            string multipartBody = BuildMultipartRegisterBody(xmlDocument, body.FileName, body.FileBase64, boundary);
+            string boundary = AconexRegisterMultipart.ExampleBoundary;
+            string multipartBody = AconexRegisterMultipart.BuildRegisterBody(xmlDocument, body.FileName, body.FileBase64, boundary);
 
             string baseUrl = string.IsNullOrWhiteSpace(_aconexConfig.AconexBaseUrl) ? "https://us1.aconex.com" : _aconexConfig.AconexBaseUrl.TrimEnd('/');
-            string registerUrl = baseUrl + "/api/projects/" + projectId + "/register";
 
-            using (var client = new HttpClient())
+            AconexRawHttpResponse raw = await _registerWritePort.PostRegisterDocumentAsync(
+                baseUrl,
+                projectId,
+                _aconexConfig.AuthorizationHeader,
+                _aconexConfig.IntegrationId,
+                multipartBody,
+                boundary,
+                default).ConfigureAwait(false);
+
+            string responseText = raw.Body ?? "";
+
+            if (!raw.IsSuccessStatusCode)
             {
-                client.Timeout = TimeSpan.FromMinutes(10);
-                client.DefaultRequestHeaders.Add("Authorization", "Basic " + _aconexConfig.AuthorizationHeader);
-                if (!string.IsNullOrEmpty(_aconexConfig.IntegrationId))
-                    client.DefaultRequestHeaders.Add("X-Application-Key", _aconexConfig.IntegrationId);
-                var content = new StringContent(multipartBody, Encoding.UTF8);
-                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("multipart/mixed");
-                content.Headers.ContentType.Parameters.Add(new System.Net.Http.Headers.NameValueHeaderValue("boundary", "\"" + boundary + "\""));
-
-                HttpResponseMessage response = await client.PostAsync(registerUrl, content);
-                string responseText = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
+                Utilities.Wlog($"FileUploadWithMetadata: Register Document falló. Status={raw.StatusCode}, Response={responseText}", 0);
+                if (ResponseIndicatesFieldValueAlreadyExists(responseText))
                 {
-                    Utilities.Wlog($"FileUploadWithMetadata: Register Document falló. Status={response.StatusCode}, Response={responseText}", 0);
-                    if (ResponseIndicatesFieldValueAlreadyExists(responseText))
-                    {
-                        string refArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
-                        throw new InvalidOperationException(
-                            "Aconex indica FIELD_VALUE_ALREADY_EXISTS (p. ej. documento o valor único ya existente). " +
-                            "Register Document solo crea documentos nuevos. Opciones: excluir esa fila si ya se cargó, " +
-                            "o usar en Aconex el flujo de nueva revisión / Supersede según su proceso. " +
-                            $"NombreArchivo={refArchivo}. Respuesta: {responseText}");
-                    }
-
-                    throw new InvalidOperationException($"Aconex Register Document falló: {response.StatusCode}. {responseText}");
+                    string refArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
+                    throw new InvalidOperationException(
+                        "Aconex indica FIELD_VALUE_ALREADY_EXISTS (p. ej. documento o valor único ya existente). " +
+                        "Register Document solo crea documentos nuevos. Opciones: excluir esa fila si ya se cargó, " +
+                        "o usar en Aconex el flujo de nueva revisión / Supersede según su proceso. " +
+                        $"NombreArchivo={refArchivo}. Respuesta: {responseText}");
                 }
 
-                string documentId = ParseRegisterDocumentResponse(responseText);
-                string logArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
-                Utilities.Wlog($"FileUploadWithMetadata: Documento registrado. NombreArchivo={logArchivo}, DocumentId={documentId}", 1);
-                OnStatus?.Invoke($"Registrado en Aconex: {body.FileName} (Id={documentId})");
+                throw new InvalidOperationException($"Aconex Register Document falló: {raw.StatusCode}. {responseText}");
             }
+
+            string documentId = ParseRegisterDocumentResponse(responseText);
+            string logArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
+            Utilities.Wlog($"FileUploadWithMetadata: Documento registrado. NombreArchivo={logArchivo}, DocumentId={documentId}", 1);
+            OnStatus?.Invoke($"Registrado en Aconex: {body.FileName} (Id={documentId})");
         }
 
         /// <summary>
@@ -1268,21 +1264,6 @@ namespace SigmabotSync.Application.FileExtraction
                 .Replace(">", "&gt;")
                 .Replace("\"", "&quot;")
                 .Replace("'", "&apos;");
-        }
-
-        /// <summary>
-        /// Construye el body multipart/mixed según la documentación Aconex: parte 1 = XML Document, parte 2 = X-Filename + base64.
-        /// </summary>
-        private static string BuildMultipartRegisterBody(string xmlDocument, string fileName, string fileBase64, string boundary)
-        {
-            var sb = new StringBuilder();
-            sb.Append("--").Append(boundary).Append("\r\n\r\n");
-            sb.Append(xmlDocument).Append("\r\n");
-            sb.Append("--").Append(boundary).Append("\r\n");
-            sb.Append("X-Filename: ").Append(fileName ?? "document").Append("\r\n\r\n");
-            sb.Append(fileBase64 ?? "").Append("\r\n\r\n");
-            sb.Append("--").Append(boundary).Append("--");
-            return sb.ToString();
         }
 
         /// <summary>
