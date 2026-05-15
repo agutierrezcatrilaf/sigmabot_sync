@@ -1,0 +1,286 @@
+<Window x:Class="SigmabotSync.ConfigTool.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="SigmabotSync — Configuración"
+        Height="640" Width="1040"
+        Background="{StaticResource BrushFondo}">
+    <DockPanel Margin="16">
+        <Border DockPanel.Dock="Bottom" Padding="0,12,0,0">
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#374151" FontSize="13"/>
+        </Border>
+
+        <TabControl SelectedIndex="{Binding SelectedTabIndex}" BorderThickness="0" Background="Transparent">
+            <TabItem Header="Conexión">
+                <StackPanel MaxWidth="720" HorizontalAlignment="Left" Margin="0,8,0,0">
+                    <TextBlock Text="Cadena de conexión SQL (misma BD que usa el consola: Credenciales, Trabajos, TrabajosConfiguracion, etc.)"
+                               FontWeight="SemiBold" Margin="0,0,0,8" Foreground="#111827"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#4B5563" Margin="0,0,0,8"
+                               Text="Pulse «Probar conexión» para validar y normalizar la cadena (p. ej. TrustServerCertificate). Las demás pestañas usan esa cadena al cargar o guardar."/>
+                    <TextBox Text="{Binding ConnectionString, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalScrollBarVisibility="Auto"
+                             Padding="8" FontFamily="Consolas" FontSize="12"/>
+                    <TextBlock Text="Cadena efectiva tras probar (solo lectura)" FontWeight="SemiBold" Margin="0,16,0,6" Foreground="#111827"/>
+                    <TextBox Text="{Binding EffectiveConnectionString, Mode=OneWay}"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" VerticalScrollBarVisibility="Auto"
+                             Padding="8" FontFamily="Consolas" FontSize="11" Background="#F3F4F6" Foreground="#374151"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Probar conexión" Command="{Binding ProbarConexionCommand}"/>
+                        <Button Content="Guardar en settings.json" Command="{Binding GuardarSettingsCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Credenciales">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#4B5563" Margin="0,0,0,8"
+                               Text="Edite por fila según Tipo (Aconex o BD). Las contraseñas se muestran en texto plano en esta herramienta interna. Si la lista está vacía al entrar, se intentará cargar desde la BD si la conexión es válida."/>
+                    <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,10">
+                        <Button Content="Cargar" Command="{Binding CargarCredencialesCommand}"/>
+                        <Button Content="Nueva fila" Command="{Binding NuevaCredencialCommand}"/>
+                        <Button Content="Guardar cambios" Command="{Binding GuardarCredencialesCommand}"/>
+                        <Button Content="Eliminar seleccionada" Command="{Binding EliminarCredencialSeleccionadaCommand}"/>
+                        <Button Content="Referencia claves" Command="{Binding AbrirReferenciaCamposCommand}" Margin="16,0,0,0"/>
+                    </StackPanel>
+                    <DataGrid x:Name="CredencialesDataGrid" Grid.Row="2"
+                              ItemsSource="{Binding Credenciales}"
+                              SelectedItem="{Binding CredencialSeleccionada, Mode=TwoWay}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="False"
+                              AlternatingRowBackground="#EEF2FF"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              HorizontalScrollBarVisibility="Auto">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" IsReadOnly="True" Width="52"/>
+                            <DataGridTextColumn Header="Nombre" Binding="{Binding Nombre, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="140" MinWidth="100"/>
+                            <DataGridTemplateColumn Header="Tipo" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Tipo}" Margin="6,4"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="2"
+                                                  ItemsSource="{Binding DataContext.TiposCredencialParaEditor, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  SelectedItem="{Binding Tipo, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Aconex instancia" Binding="{Binding AconexInstancia, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="160" MinWidth="100"/>
+                            <DataGridTextColumn Header="Aconex usuario" Binding="{Binding AconexUsuario, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                            <DataGridTextColumn Header="Aconex clave" Binding="{Binding AconexClave, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
+                            <DataGridTextColumn Header="Integration Id" Binding="{Binding AconexIntegrationId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                            <DataGridTextColumn Header="Organization Id" Binding="{Binding AconexOrganizationId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                            <DataGridTextColumn Header="User Id" Binding="{Binding AconexUserId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
+                            <DataGridTextColumn Header="BD servidor" Binding="{Binding BdServidor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                            <DataGridTextColumn Header="BD tipo conexión" Binding="{Binding BdTipoConexion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                            <DataGridTextColumn Header="BD usuario" Binding="{Binding BdUsuario, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
+                            <DataGridTextColumn Header="BD clave" Binding="{Binding BdClave, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+                            <DataGridTextColumn Header="BD base datos" Binding="{Binding BdBaseDatos, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" MinWidth="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Trabajos">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#4B5563" Margin="0,0,0,8"
+                               Text="Nombre, Tipo y Estado son editables. Periodicidad y control de ejecución también (el motor o el programador externo pueden usarlos). Fechas y resultados suelen rellenarlos el consola al ejecutar."/>
+                    <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,10">
+                        <Button Content="Cargar" Command="{Binding CargarTrabajosCommand}"/>
+                        <Button Content="Nuevo trabajo" Command="{Binding NuevoTrabajoCommand}"/>
+                        <Button Content="Guardar cambios" Command="{Binding GuardarTrabajosCommand}"/>
+                        <Button Content="Eliminar seleccionado" Command="{Binding EliminarTrabajoSeleccionadoCommand}"/>
+                    </StackPanel>
+                    <DataGrid x:Name="TrabajosDataGrid" Grid.Row="2"
+                              ItemsSource="{Binding Trabajos}"
+                              SelectedItem="{Binding TrabajoSeleccionado, Mode=TwoWay}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="False"
+                              AlternatingRowBackground="#F0FDF4"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" IsReadOnly="True" Width="56"/>
+                            <DataGridTextColumn Header="Nombre" Binding="{Binding Nombre, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*" MinWidth="160"/>
+                            <DataGridTemplateColumn Header="Tipo" Width="170">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Tipo}" Margin="6,4"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="2"
+                                                  ItemsSource="{Binding DataContext.TiposTrabajoParaEditor, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  SelectedItem="{Binding Tipo, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Periodicidad" Binding="{Binding Perioricidad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                            <DataGridTextColumn Header="Última ejecución" IsReadOnly="True" Width="150"
+                                                Binding="{Binding FechaUltimaEjecucion, StringFormat='{}{0:yyyy-MM-dd HH:mm}', TargetNullValue=-}"/>
+                            <DataGridTextColumn Header="Próxima ejecución" IsReadOnly="True" Width="150"
+                                                Binding="{Binding FechaProximaEjecucion, StringFormat='{}{0:yyyy-MM-dd HH:mm}', TargetNullValue=-}"/>
+                            <DataGridTextColumn Header="Resultado última" Binding="{Binding ResultadoUltimaEjecucion}" IsReadOnly="True" Width="100"/>
+                            <DataGridTextColumn Header="Control ejecución" Binding="{Binding ControldeEjecucion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                            <DataGridTemplateColumn Header="Estado" Width="130">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Estado}" Margin="6,4"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="2"
+                                                  ItemsSource="{Binding DataContext.EstadosTrabajoParaEditor, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  SelectedItem="{Binding Estado, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Últ. corrección" Binding="{Binding UltCorrEjecucion}" IsReadOnly="True" Width="200"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Parámetros trabajo">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#374151" Margin="0,0,0,8"
+                               Text="Los campos dependen del Tipo del trabajo. Credencial Aconex y Credencial BD se eligen de la tabla Credenciales (filtro por tipo). Guarde para escribir en TrabajosConfiguracion."/>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Trabajo:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox ItemsSource="{Binding DataContext.Trabajos, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  SelectedItem="{Binding DataContext.TrabajoParaParametros, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                                  DisplayMemberPath="EtiquetaLista"
+                                  MinWidth="320" VerticalAlignment="Center"/>
+                        <Button Content="Refrescar trabajos" Command="{Binding DataContext.CargarTrabajosCommand, RelativeSource={RelativeSource AncestorType=Window}}" Margin="8,0,0,0"/>
+                        <Button Content="Recargar desde BD" Command="{Binding DataContext.CargarParametrosTrabajoCommand, RelativeSource={RelativeSource AncestorType=Window}}" Margin="8,0,0,0"/>
+                        <Button Content="Guardar parámetros" Command="{Binding DataContext.GuardarParametrosTrabajoCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock Text="{Binding MensajeFormularioParametros}" TextWrapping="Wrap" Foreground="#B45309" Margin="0,0,0,12"
+                                       FontSize="13"/>
+                            <ItemsControl ItemsSource="{Binding CamposParametrosTrabajo}"
+                                          Visibility="{Binding FormularioParametrosActivo, Converter={StaticResource BoolToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="240"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding TituloCampo}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,8,12,0" FontWeight="SemiBold"/>
+                                            <Grid Grid.Column="1" ToolTip="{Binding Ayuda}">
+                                                <TextBox Text="{Binding Valor, UpdateSourceTrigger=PropertyChanged}"
+                                                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="36" MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                                                         Padding="8" FontSize="13"
+                                                         Visibility="{Binding UsaSelectorCredencial, Converter={StaticResource InvBoolToVis}}"/>
+                                                <ComboBox ItemsSource="{Binding OpcionesCredencial}"
+                                                          SelectedItem="{Binding CredencialSeleccionada, Mode=TwoWay}"
+                                                          DisplayMemberPath="Display"
+                                                          MinHeight="36" Padding="8,4" FontSize="13"
+                                                          Visibility="{Binding UsaSelectorCredencial, Converter={StaticResource BoolToVis}}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Programación">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#374151" Margin="0,0,0,8"
+                               Text="Filas de TrabajosProgramacion: día (0=domingo … 6=sábado) y hora. La hora se elige de 01:00 a 23:00 o 24:00 (medianoche fin de día se guarda como 23:59:59 en SQL TIME)."/>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Trabajo:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox ItemsSource="{Binding DataContext.Trabajos, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  SelectedItem="{Binding DataContext.TrabajoParaProgramacion, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                                  DisplayMemberPath="EtiquetaLista"
+                                  MinWidth="320" VerticalAlignment="Center"/>
+                        <Button Content="Refrescar trabajos" Command="{Binding DataContext.CargarTrabajosCommand, RelativeSource={RelativeSource AncestorType=Window}}" Margin="8,0,0,0"/>
+                        <Button Content="Cargar programación" Command="{Binding DataContext.CargarProgramacionTrabajoCommand, RelativeSource={RelativeSource AncestorType=Window}}" Margin="8,0,0,0"/>
+                        <Button Content="Nueva fila" Command="{Binding DataContext.NuevaFilaProgramacionCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        <Button Content="Guardar" Command="{Binding DataContext.GuardarProgramacionTrabajoCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        <Button Content="Eliminar fila" Command="{Binding DataContext.EliminarProgramacionSeleccionadaCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    </StackPanel>
+                    <DataGrid x:Name="ProgramacionDataGrid" Grid.Row="2"
+                              ItemsSource="{Binding ProgramacionesTrabajo}"
+                              SelectedItem="{Binding ProgramacionSeleccionada, Mode=TwoWay}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="False"
+                              AlternatingRowBackground="#F5F3FF"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" IsReadOnly="True" Width="52"/>
+                            <DataGridTextColumn Header="IdTrabajo" Binding="{Binding IdTrabajo}" IsReadOnly="True" Width="72"/>
+                            <DataGridTemplateColumn Header="Día semana" Width="140">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DiaSemanaDisplay}" Margin="6,4"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="2"
+                                                  ItemsSource="{Binding DataContext.DiasSemanaProgramacion, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  SelectedValuePath="Valor"
+                                                  DisplayMemberPath="Nombre"
+                                                  SelectedValue="{Binding DiaSemana, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Hora" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="2" MinWidth="100"
+                                                  ItemsSource="{Binding DataContext.HorasProgramacionParaCombo, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  DisplayMemberPath="Display"
+                                                  SelectedItem="{Binding HoraSeleccionada, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridCheckBoxColumn Header="Activo" Binding="{Binding Activo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

@@ -23,6 +23,11 @@ namespace SigmabotSync.Domain.Config
         public string ProjectId { get; set; }
 
         /// <summary>
+        /// Nombre del proyecto (opcional) para usar como carpeta raíz de salida.
+        /// </summary>
+        public string ProjectName { get; set; }
+
+        /// <summary>
         /// ID de la organización en Aconex
         /// </summary>
         public string OrgId { get; set; }

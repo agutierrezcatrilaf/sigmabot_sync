@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using System.Reflection;
 
@@ -96,11 +97,39 @@ namespace SigmabotSync.Infrastructure.Data
                 return value;
 
             if (targetType == typeof(string))
-                return value.ToString().Trim();
+                return Convert.ToString(value, CultureInfo.InvariantCulture)?.Trim();
 
             Type nullableUnderlying = Nullable.GetUnderlyingType(targetType);
             Type convertType = nullableUnderlying ?? targetType;
-            return Convert.ChangeType(value, convertType);
+            var inv = CultureInfo.InvariantCulture;
+
+            try
+            {
+                if (convertType == typeof(int))
+                    return Convert.ToInt32(value, inv);
+                if (convertType == typeof(long))
+                    return Convert.ToInt64(value, inv);
+                if (convertType == typeof(short))
+                    return Convert.ToInt16(value, inv);
+                if (convertType == typeof(byte))
+                    return Convert.ToByte(value, inv);
+                if (convertType == typeof(double))
+                    return Convert.ToDouble(value, inv);
+                if (convertType == typeof(float))
+                    return Convert.ToSingle(value, inv);
+                if (convertType == typeof(decimal))
+                    return Convert.ToDecimal(value, inv);
+                if (convertType == typeof(bool))
+                    return Convert.ToBoolean(value, inv);
+                if (convertType == typeof(DateTime))
+                    return Convert.ToDateTime(value, inv);
+            }
+            catch
+            {
+                // cae al ChangeType genérico
+            }
+
+            return Convert.ChangeType(value, convertType, inv);
         }
     }
 }

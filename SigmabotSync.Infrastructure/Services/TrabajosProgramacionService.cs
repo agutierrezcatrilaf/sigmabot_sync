@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using SigmabotSync.Domain.Entities;
 
@@ -92,17 +93,34 @@ namespace SigmabotSync.Infrastructure.Services
                         {
                             lista.Add(new TrabajoProgramacion
                             {
-                                Id = rdr.GetInt32(0),
-                                IdTrabajo = rdr.GetInt32(1),
-                                DiaSemana = rdr.GetInt32(2),
-                                Hora = rdr.IsDBNull(3) ? TimeSpan.Zero : rdr.GetTimeSpan(3),
-                                Activo = rdr.GetBoolean(4)
+                                Id = Convert.ToInt32(rdr.GetValue(0), CultureInfo.InvariantCulture),
+                                IdTrabajo = Convert.ToInt32(rdr.GetValue(1), CultureInfo.InvariantCulture),
+                                DiaSemana = Convert.ToInt32(rdr.GetValue(2), CultureInfo.InvariantCulture),
+                                Hora = LeerHoraSql(rdr, 3),
+                                Activo = Convert.ToBoolean(rdr.GetValue(4), CultureInfo.InvariantCulture)
                             });
                         }
                     }
                 }
             }
             return lista;
+        }
+
+        private static TimeSpan LeerHoraSql(SqlDataReader rdr, int ordinal)
+        {
+            if (rdr.IsDBNull(ordinal))
+                return TimeSpan.Zero;
+            var v = rdr.GetValue(ordinal);
+            if (v is TimeSpan ts)
+                return ts;
+            if (v is DateTime dt)
+                return dt.TimeOfDay;
+            var s = Convert.ToString(v, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(s))
+                return TimeSpan.Zero;
+            if (TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+            return TimeSpan.Zero;
         }
     }
 }

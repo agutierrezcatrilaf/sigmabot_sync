@@ -2,6 +2,7 @@ using SigmabotSync.Application.Extraction;
 using SigmabotSync.Application.FileExtraction;
 using SigmabotSync.Application.Synchronization;
 using SigmabotSync.Domain.Config;
+using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
 using SigmabotSync.Domain.Ports;
 using SigmabotSync.Infrastructure.External;
@@ -13,15 +14,6 @@ using System.Threading.Tasks;
 
 namespace SigmabotSync.Console
 {
-    /// <summary>Tipos de trabajo soportados (valor en TrabajosConfiguracion TipoTrabajo).</summary>
-    internal static class TipoTrabajoConst
-    {
-        public const string FileExtraction = "FileExtraction";
-        public const string ProjectSync = "ProjectSync";
-        public const string FullExtraction = "FullExtraction";
-        public const string FileUploadWithMetadata = "FileUploadWithMetadata";
-    }
-
     class Program
     {
         /// <summary>
@@ -29,7 +21,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 6;
+        private static readonly int? DebugIdTrabajo = 2;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -187,10 +179,10 @@ namespace SigmabotSync.Console
                     return;
 
                 string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
-                bool tipoValido = tipoTrabajo == TipoTrabajoConst.FileExtraction
-                    || tipoTrabajo == TipoTrabajoConst.ProjectSync
-                    || tipoTrabajo == TipoTrabajoConst.FullExtraction
-                    || tipoTrabajo == TipoTrabajoConst.FileUploadWithMetadata;
+                bool tipoValido = tipoTrabajo == TipoTrabajoIds.FileExtraction
+                    || tipoTrabajo == TipoTrabajoIds.ProjectSync
+                    || tipoTrabajo == TipoTrabajoIds.FullExtraction
+                    || tipoTrabajo == TipoTrabajoIds.FileUploadWithMetadata;
 
                 if (!tipoValido)
                 {
@@ -210,17 +202,17 @@ namespace SigmabotSync.Console
 
                 switch (tipoTrabajo)
                 {
-                    case TipoTrabajoConst.FileExtraction:
-                        await EjecutarExtraccionArchivosAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
+                    case TipoTrabajoIds.FileExtraction:
+                        await EjecutarExtraccionArchivosAsync(connectionString, trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         SincronizarMetadataDocumentos(trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         break;
-                    case TipoTrabajoConst.ProjectSync:
+                    case TipoTrabajoIds.ProjectSync:
                         await EjecutarProjectSyncAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         break;
-                    case TipoTrabajoConst.FullExtraction:
+                    case TipoTrabajoIds.FullExtraction:
                         await EjecutarFullExtractionAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         break;
-                    case TipoTrabajoConst.FileUploadWithMetadata:
+                    case TipoTrabajoIds.FileUploadWithMetadata:
                         await EjecutarFileUploadWithMetadataAsync(trabajoConfig, credAconex, credBd, etapasEjecutadas);
                         break;
                 }
@@ -401,13 +393,14 @@ namespace SigmabotSync.Console
         /// Configura logging, eventos y registra la etapa "FileExtraction".
         /// </summary>
         private static async Task EjecutarExtraccionArchivosAsync(
+            string connectionString,
             TrabajoConfiguracion trabajoConfig,
             Credencial credAconex,
             Credencial credBd,
             List<string> etapasEjecutadas)
         {
             string projectId = trabajoConfig.IdProyecto ?? string.Empty;
-            string projectName = !string.IsNullOrWhiteSpace(trabajoConfig.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
+            string projectName = ObtenerNombreProyectoParaCarpeta(connectionString, trabajoConfig);
             string basePath = !string.IsNullOrWhiteSpace(trabajoConfig.BasePath) ? trabajoConfig.BasePath.Trim() : null;
 
             SigmabotSync.Application.Common.Utilities.Wlog("Configuración desde TrabajosConfiguracion (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
@@ -416,6 +409,7 @@ namespace SigmabotSync.Console
             SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre}", 0);
 
             var config = FileExtractionConfig.FromCredencial(credAconex, projectId, basePath);
+            config.ProjectName = projectName;
             var returnFields = trabajoConfig.ToReturnFields();
             if (returnFields != null && returnFields.Count > 0)
                 config.ReturnFields = returnFields;
@@ -441,6 +435,29 @@ namespace SigmabotSync.Console
                 // Ejecutar extracción de archivos (Aconex) — descarga de documentos
                 await worker.ProcessAllPagesAsync();
                 etapasEjecutadas.Add("FileExtraction");
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el nombre del proyecto para usar como carpeta raíz en FileExtraction.
+        /// Prioriza la tabla Proyectos por ACXProjectId; si no hay dato, usa TrabajosConfiguracion.Proyecto.
+        /// </summary>
+        private static string ObtenerNombreProyectoParaCarpeta(string connectionString, TrabajoConfiguracion trabajoConfig)
+        {
+            string fallback = !string.IsNullOrWhiteSpace(trabajoConfig?.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
+            if (trabajoConfig == null || string.IsNullOrWhiteSpace(trabajoConfig.IdProyecto) || string.IsNullOrWhiteSpace(connectionString))
+                return fallback;
+
+            try
+            {
+                var trabajosService = new TrabajosService(connectionString);
+                var nombre = trabajosService.GetNombreProyectoByAcxProjectId(trabajoConfig.IdProyecto.Trim());
+                return !string.IsNullOrWhiteSpace(nombre) ? nombre : fallback;
+            }
+            catch (Exception ex)
+            {
+                SigmabotSync.Application.Common.Utilities.Wlog($"[Aviso] No se pudo resolver nombre de proyecto desde Proyectos (ACXProjectId={trabajoConfig.IdProyecto}): {ex.Message}", 0);
+                return fallback;
             }
         }
 
@@ -634,21 +651,7 @@ namespace SigmabotSync.Console
                 return null;
             }
 
-            return AsegurarTrustServerCertificate(settings.DatabaseConnectionString.Trim());
-        }
-
-        /// <summary>
-        /// Añade TrustServerCertificate=True a la cadena de conexión si no está presente.
-        /// En .NET 8 la validación SSL es estricta; con servidores que usan certificado no confiable (ej. self-signed) se necesita esto.
-        /// </summary>
-        private static string AsegurarTrustServerCertificate(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString)) return connectionString;
-            const string key = "TrustServerCertificate=";
-            if (connectionString.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
-                return connectionString;
-            var separator = connectionString.TrimEnd().EndsWith(";", StringComparison.Ordinal) ? "" : ";";
-            return connectionString + separator + "TrustServerCertificate=True;";
+            return ConnectionStringHelper.AsegurarTrustServerCertificate(settings.DatabaseConnectionString.Trim());
         }
 
         /// <summary>
@@ -677,7 +680,7 @@ namespace SigmabotSync.Console
             }
 
             string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
-            if (tipoTrabajo == TipoTrabajoConst.FileUploadWithMetadata)
+            if (tipoTrabajo == TipoTrabajoIds.FileUploadWithMetadata)
             {
                 if (string.IsNullOrWhiteSpace(trabajoConfig.TablaMetadata))
                 {

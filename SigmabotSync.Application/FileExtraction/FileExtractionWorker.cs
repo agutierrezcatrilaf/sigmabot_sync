@@ -24,6 +24,7 @@ namespace SigmabotSync.Application.FileExtraction
         private static readonly string[] RequiredReturnFields = new[]
         {
             "docno",
+            "TipoDeDocumento_singleSelect",
             "filename",
             "trackingid",
             "versionnumber"
@@ -204,6 +205,7 @@ namespace SigmabotSync.Application.FileExtraction
                 string documentId = document.Id.ToString();
                 string version = document.GetDynamicValue("versionNumber") ?? "0";
                 string documentNumber = document.DocumentNumber ?? "";
+                string documentType = GetProjectFieldValue(document, "TipoDeDocumento_singleSelect");
 
                 string filenameFromMeta = document.GetDynamicValue("filename")?.ToString();
                 if (string.IsNullOrWhiteSpace(filenameFromMeta))
@@ -216,9 +218,15 @@ namespace SigmabotSync.Application.FileExtraction
                 if (!string.IsNullOrEmpty(folderName) && folderName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     folderName = folderName.Substring(0, folderName.Length - 4);
 
+                string projectFolder = string.IsNullOrWhiteSpace(_config.ProjectName) ? _config.ProjectId : _config.ProjectName;
+                projectFolder = string.Join("_", projectFolder.Split(Path.GetInvalidFileNameChars()));
+                string documentTypeFolder = string.IsNullOrWhiteSpace(documentType) ? "SinTipoDocumento" : documentType.Trim();
+                documentTypeFolder = string.Join("_", documentTypeFolder.Split(Path.GetInvalidFileNameChars()));
+
                 string documentPath = Path.Combine(
                     _config.BasePath,
-                    _config.ProjectId,
+                    projectFolder,
+                    documentTypeFolder,
                     folderName,
                     version
                 );
@@ -282,6 +290,17 @@ namespace SigmabotSync.Application.FileExtraction
         {
             (_searchPort as IDisposable)?.Dispose();
             (_contentPort as IDisposable)?.Dispose();
+        }
+
+        private static string GetProjectFieldValue(Searchresult document, string fieldName)
+        {
+            if (document?.ProjectFields == null || string.IsNullOrWhiteSpace(fieldName))
+                return null;
+
+            var field = document.ProjectFields.FirstOrDefault(p =>
+                string.Equals(p.Name, fieldName, StringComparison.OrdinalIgnoreCase));
+
+            return field?.Value;
         }
     }
 }

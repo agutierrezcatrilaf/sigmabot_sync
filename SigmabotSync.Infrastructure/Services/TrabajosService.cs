@@ -130,5 +130,32 @@ namespace SigmabotSync.Infrastructure.Services
                 }
             }
         }
+
+        /// <summary>
+        /// Obtiene el nombre del proyecto desde la tabla Proyectos por projectId.
+        /// Devuelve null si no existe coincidencia.
+        /// </summary>
+        public string GetNombreProyectoByAcxProjectId(string acxProjectId)
+        {
+            if (string.IsNullOrWhiteSpace(acxProjectId))
+                return null;
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+
+                const string sql = @"
+                    SELECT TOP 1 Nombre
+                    FROM [Proyectos]
+                    WHERE [projectId] = @ACXProjectId";
+
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@ACXProjectId", acxProjectId.Trim());
+                    var result = cmd.ExecuteScalar();
+                    return result == null || result == DBNull.Value ? null : (result as string)?.Trim();
+                }
+            }
+        }
     }
 }

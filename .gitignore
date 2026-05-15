@@ -18,6 +18,7 @@ packages/
 *.userprefs
 
 ## Ignore publish artifacts
+artifacts/
 *.pubxml
 *.publishproj
 
