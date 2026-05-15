@@ -1,0 +1,62 @@
+@inherits ConfiguratorComponentBase
+
+<MudText Typo="Typo.body2" Class="mb-3">
+    Filas de TrabajosProgramacion: día (0=domingo … 6=sábado) y hora (01:00–23:00 o 24:00).
+</MudText>
+<MudStack Row="true" Class="mb-3" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+    <MudText>Trabajo:</MudText>
+    <MudSelect T="TrabajoRowViewModel" @bind-Value="State.TrabajoParaProgramacion" Label="Seleccionar" Style="min-width: 320px;"
+               ToStringFunc="@(t => t?.EtiquetaLista ?? string.Empty)" Clearable="true" Dense="true">
+        @foreach (var t in State.Trabajos)
+        {
+            <MudSelectItem Value="@t">@t.EtiquetaLista</MudSelectItem>
+        }
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" OnClick="State.CargarTrabajos">Refrescar trabajos</MudButton>
+    <MudButton Variant="Variant.Outlined" OnClick="Cargar">Cargar programación</MudButton>
+    <MudButton Variant="Variant.Outlined" OnClick="Nueva">Nueva fila</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="Guardar">Guardar</MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="Eliminar">Eliminar fila</MudButton>
+</MudStack>
+
+<MudTable Items="@State.ProgramacionesTrabajo" Hover="true" Dense="true"
+          @bind-SelectedItem="State.ProgramacionSeleccionada">
+    <HeaderContent>
+        <MudTh>Id</MudTh>
+        <MudTh>IdTrabajo</MudTh>
+        <MudTh>Día semana</MudTh>
+        <MudTh>Hora</MudTh>
+        <MudTh>Activo</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>@context.IdTrabajo</MudTd>
+        <MudTd>
+            <MudSelect T="int" @bind-Value="context.DiaSemana" Margin="Margin.Dense" Dense="true" Variant="Variant.Text">
+                @foreach (var d in State.DiasSemanaProgramacion)
+                {
+                    <MudSelectItem Value="@d.Valor">@d.Nombre</MudSelectItem>
+                }
+            </MudSelect>
+        </MudTd>
+        <MudTd>
+            <MudSelect T="HoraProgramacionOpcion" @bind-Value="context.HoraSeleccionada" Margin="Margin.Dense" Dense="true"
+                       ToStringFunc="@(h => h?.Display ?? string.Empty)" Variant="Variant.Text">
+                @foreach (var h in State.HorasProgramacionParaCombo)
+                {
+                    <MudSelectItem Value="@h">@h.Display</MudSelectItem>
+                }
+            </MudSelect>
+        </MudTd>
+        <MudTd>
+            <MudCheckBox T="bool" @bind-Value="context.Activo" Color="Color.Primary" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private Task Cargar() => State.CargarProgramacionTrabajoAsync();
+    private Task Nueva() => State.NuevaFilaProgramacionAsync();
+    private Task Guardar() => State.GuardarProgramacionTrabajoAsync();
+    private Task Eliminar() => State.EliminarProgramacionSeleccionadaAsync();
+}

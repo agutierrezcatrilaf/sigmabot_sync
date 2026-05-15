@@ -1,0 +1,78 @@
+@inherits ConfiguratorComponentBase
+
+<MudText Typo="Typo.body2" Class="mb-3">
+    Los campos dependen del Tipo del trabajo. Credencial Aconex y Credencial BD se eligen de la tabla Credenciales.
+</MudText>
+<div class="config-param-toolbar mb-3">
+    <span class="config-param-label config-param-label-inline">Trabajo</span>
+    <MudSelect T="TrabajoRowViewModel" @bind-Value="State.TrabajoParaParametros" Class="config-param-select-trabajo"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true"
+               Placeholder="Seleccione un trabajo"
+               ToStringFunc="@(t => t?.EtiquetaLista ?? string.Empty)">
+        @foreach (var t in State.Trabajos)
+        {
+            <MudSelectItem Value="@t">@t.EtiquetaLista</MudSelectItem>
+        }
+    </MudSelect>
+    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="config-param-toolbar-actions">
+        <MudButton Variant="Variant.Outlined" OnClick="State.CargarTrabajos">Refrescar trabajos</MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="Recargar">Recargar desde BD</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="Guardar">Guardar parámetros</MudButton>
+    </MudStack>
+</div>
+
+@if (!string.IsNullOrEmpty(State.MensajeFormularioParametros))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-3">@State.MensajeFormularioParametros</MudAlert>
+}
+
+@if (State.FormularioParametrosActivo)
+{
+    <div class="config-param-form">
+        @foreach (var campo in State.CamposParametrosTrabajo)
+        {
+            <div class="config-param-row">
+                <label class="config-param-label" for="@GetCampoId(campo)">@campo.TituloCampo</label>
+                <div class="@GetFieldClass(campo)">
+                    @if (campo.UsaSelectorCredencial)
+                    {
+                        <MudSelect T="CredencialComboItem" InputId="@GetCampoId(campo)"
+                                   @bind-Value="campo.CredencialSeleccionada"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true"
+                                   Placeholder="Seleccione…"
+                                   HelperText="@campo.Ayuda"
+                                   ToStringFunc="@(c => c?.Display ?? string.Empty)">
+                            @foreach (var op in campo.OpcionesCredencial)
+                            {
+                                <MudSelectItem Value="@op">@op.Display</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudTextField InputId="@GetCampoId(campo)" @bind-Value="campo.Valor"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Lines="@GetLineCount(campo)"
+                                      HelperText="@campo.Ayuda" />
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private Task Recargar() => State.CargarParametrosTrabajoAsync();
+    private Task Guardar() => State.GuardarParametrosTrabajoAsync();
+
+    private static string GetCampoId(ParametroTrabajoCampoViewModel campo) =>
+        "param-" + campo.Clave.Replace(".", "-", StringComparison.Ordinal);
+
+    private static int GetLineCount(ParametroTrabajoCampoViewModel campo) =>
+        campo.Clave.Contains("Campos", StringComparison.OrdinalIgnoreCase) ? 3 : 1;
+
+    private static string GetFieldClass(ParametroTrabajoCampoViewModel campo) =>
+        campo.Clave.Contains("Campos", StringComparison.OrdinalIgnoreCase)
+            ? "config-param-field config-param-field-wide"
+            : "config-param-field";
+}

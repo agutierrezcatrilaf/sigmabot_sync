@@ -1,0 +1,57 @@
+@page "/"
+@page "/configurador"
+@inherits ConfiguratorComponentBase
+
+<PageTitle>SigmabotSync — Configuración</PageTitle>
+
+<MudPaper Class="pa-4 config-workspace" Elevation="2">
+    <nav class="config-tab-bar" role="tablist" aria-label="Configuración SigmabotSync">
+        @foreach (var tab in _tabs)
+        {
+            <button type="button"
+                    role="tab"
+                    aria-selected="@(State.SelectedTabIndex == tab.Index)"
+                    class="config-tab @(State.SelectedTabIndex == tab.Index ? "config-tab-active" : "")"
+                    @onclick="@(() => SelectTab(tab.Index))">
+                @tab.Label
+            </button>
+        }
+    </nav>
+
+    <div class="config-panel">
+        @switch (State.SelectedTabIndex)
+        {
+            case 0:
+                <ConexionTab />
+                break;
+            case 1:
+                <CredencialesTab />
+                break;
+            case 2:
+                <TrabajosTab />
+                break;
+            case 3:
+                <ParametrosTrabajoTab />
+                break;
+            case 4:
+                <ProgramacionTab />
+                break;
+        }
+    </div>
+
+    <hr class="config-status-divider" />
+    <p class="config-status">@State.StatusMessage</p>
+</MudPaper>
+
+@code {
+    private static readonly (int Index, string Label)[] _tabs =
+    {
+        (0, "Conexión"),
+        (1, "Credenciales"),
+        (2, "Trabajos"),
+        (3, "Parámetros trabajo"),
+        (4, "Programación")
+    };
+
+    private void SelectTab(int index) => State.OnTabIndexChanged(index);
+}

@@ -9,11 +9,15 @@ namespace SigmabotSync.Infrastructure.Services
     {
         private readonly string _settingsPath;
 
-        public SettingsService()
+        /// <summary>Ruta absoluta del archivo JSON de configuración.</summary>
+        public string SettingsFilePath => _settingsPath;
+
+        /// <param name="settingsFilePath">Si es null, usa <c>settings.json</c> en el directorio base de la app (consola/WPF).</param>
+        public SettingsService(string settingsFilePath = null)
         {
-            _settingsPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "settings.json");
+            _settingsPath = string.IsNullOrWhiteSpace(settingsFilePath)
+                ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json")
+                : settingsFilePath;
         }
 
         public AconexSettings Load()

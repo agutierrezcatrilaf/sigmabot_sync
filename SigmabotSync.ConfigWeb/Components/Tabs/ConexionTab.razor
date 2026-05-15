@@ -1,0 +1,21 @@
+@inherits ConfiguratorComponentBase
+
+<MudText Typo="Typo.subtitle1" Class="mb-2">Cadena de conexión SQL</MudText>
+<MudText Typo="Typo.body2" Class="mb-3">
+    Misma BD que usa la consola (Credenciales, Trabajos, TrabajosConfiguracion, etc.).
+    Pulse «Probar conexión» para validar y normalizar la cadena (p. ej. TrustServerCertificate).
+</MudText>
+<MudText Typo="Typo.caption" Class="mb-3" Style="color:#6b7280;">
+    El archivo se guarda en la carpeta del proyecto web: <strong>@State.SettingsFilePath</strong>
+</MudText>
+<MudTextField @bind-Value="State.ConnectionString" Lines="4" Variant="Variant.Outlined"
+              Margin="Margin.Dense" Style="font-family: Consolas, monospace;" FullWidth="true" />
+
+<MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Cadena efectiva tras probar (solo lectura)</MudText>
+<MudTextField Value="State.EffectiveConnectionString" ReadOnly="true" Lines="3" Variant="Variant.Filled"
+              Margin="Margin.Dense" Style="font-family: Consolas, monospace;" FullWidth="true" />
+
+<MudStack Row="true" Class="mt-3" Spacing="2">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="State.ProbarConexion">Probar conexión</MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="State.GuardarSettings">Guardar en settings.json</MudButton>
+</MudStack>

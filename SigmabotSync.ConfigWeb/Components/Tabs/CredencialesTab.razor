@@ -1,0 +1,89 @@
+@inherits ConfiguratorComponentBase
+
+<MudText Typo="Typo.body2" Class="mb-3">
+    Edite por fila según Tipo (Aconex o BD). Las contraseñas se muestran en texto plano en esta herramienta interna.
+</MudText>
+<MudStack Row="true" Class="mb-3" Spacing="2" Wrap="Wrap.Wrap">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="State.CargarCredenciales">Cargar</MudButton>
+    <MudButton Variant="Variant.Outlined" OnClick="State.NuevaCredencial">Nueva fila</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="Guardar">Guardar cambios</MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="Eliminar">Eliminar seleccionada</MudButton>
+    <MudButton Variant="Variant.Text" OnClick="Referencia">Referencia claves</MudButton>
+</MudStack>
+
+<p class="config-grid-hint">Muchas columnas: use el scroll horizontal si no ve el texto completo.</p>
+<div class="config-grid-scroll">
+    <MudTable Items="@State.Credenciales" Hover="true" Dense="true" Breakpoint="Breakpoint.None"
+              Elevation="0" HorizontalScrollbar="false" Square="true"
+              Class="config-edit-table" @bind-SelectedItem="State.CredencialSeleccionada">
+        <HeaderContent>
+            <MudTh Class="col-id">Id</MudTh>
+            <MudTh Class="col-nombre">Nombre</MudTh>
+            <MudTh Class="col-tipo">Tipo</MudTh>
+            <MudTh Class="col-aconex-inst">Aconex instancia</MudTh>
+            <MudTh Class="col-aconex-user">Aconex usuario</MudTh>
+            <MudTh Class="col-aconex-pass">Aconex clave</MudTh>
+            <MudTh Class="col-guid">Integration Id</MudTh>
+            <MudTh Class="col-org-id">Organization Id</MudTh>
+            <MudTh Class="col-user-id">User Id</MudTh>
+            <MudTh Class="col-bd-srv">BD servidor</MudTh>
+            <MudTh Class="col-bd-tipo">BD tipo conexión</MudTh>
+            <MudTh Class="col-bd-user">BD usuario</MudTh>
+            <MudTh Class="col-bd-pass">BD clave</MudTh>
+            <MudTh Class="col-bd-db">BD base datos</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd Class="col-id">@context.Id</MudTd>
+            <MudTd Class="col-nombre">
+                <MudTextField @bind-Value="context.Nombre" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-tipo">
+                <MudSelect T="string" @bind-Value="context.Tipo" Margin="Margin.Dense" Dense="true" Variant="Variant.Text" FullWidth="true">
+                    @foreach (var t in State.TiposCredencialParaEditor)
+                    {
+                        <MudSelectItem Value="@t">@t</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd Class="col-aconex-inst">
+                <MudTextField @bind-Value="context.AconexInstancia" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-aconex-user">
+                <MudTextField @bind-Value="context.AconexUsuario" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-aconex-pass">
+                <MudTextField @bind-Value="context.AconexClave" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-guid">
+                <MudTextField @bind-Value="context.AconexIntegrationId" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-org-id">
+                <MudTextField @bind-Value="context.AconexOrganizationId" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-user-id">
+                <MudTextField @bind-Value="context.AconexUserId" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-bd-srv">
+                <MudTextField @bind-Value="context.BdServidor" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-bd-tipo">
+                <MudTextField @bind-Value="context.BdTipoConexion" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-bd-user">
+                <MudTextField @bind-Value="context.BdUsuario" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-bd-pass">
+                <MudTextField @bind-Value="context.BdClave" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+            <MudTd Class="col-bd-db">
+                <MudTextField @bind-Value="context.BdBaseDatos" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</div>
+
+@code {
+    private Task Guardar() => State.GuardarCredencialesAsync();
+    private Task Eliminar() => State.EliminarCredencialSeleccionadaAsync();
+    private Task Referencia() => State.AbrirReferenciaCamposAsync();
+}
