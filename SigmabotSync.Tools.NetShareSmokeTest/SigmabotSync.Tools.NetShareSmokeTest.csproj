@@ -6,5 +6,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>SigmabotSync.Tools.NetShareSmokeTest</RootNamespace>
     <AssemblyName>NetShareSmokeTest</AssemblyName>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 </Project>

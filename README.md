@@ -2,190 +2,267 @@
 
 ## Resumen del Proyecto
 
-**SigmabotSync** es una aplicación desarrollada en C# (.NET Framework 4.8) que implementa dos casos de uso principales:
-1. **Extracción de documentos** desde proyectos de Aconex
-2. **Sincronización de documentos** entre proyectos de Aconex
+**SigmabotSync** es una solución desarrollada en C# sobre **.NET 8** que automatiza la interacción con la plataforma **Aconex** y la operación de "trabajos" programados sobre una base de datos SQL Server. Cubre tres casos de uso principales:
 
-El proyecto está diseñado siguiendo los principios de **Arquitectura Hexagonal** (Ports & Adapters), donde el dominio es independiente de las implementaciones concretas de infraestructura y presentación.
+1. **Extracción** de documentos, incidentes, correos y workflows desde proyectos de Aconex.
+2. **Sincronización** de documentos entre proyectos de Aconex.
+3. **Carga de archivos con metadatos** hacia proyectos de Aconex.
 
-> **Nota**: La capa UI (Windows Forms) está siendo deprecada. La configuración se leerá desde una base de datos en el futuro.
+El diseño sigue los principios de **Arquitectura Hexagonal** (Ports & Adapters): el dominio define los puertos (interfaces) y la infraestructura implementa los adaptadores concretos (clientes HTTP, acceso a BD, etc.).
+
+> **Nota**: La configuración de credenciales y trabajos ya está migrada a **SQL Server**. El `settings.json` que aún existe sólo se usa para la cadena de conexión a la BD.
 
 ## Arquitectura Hexagonal
 
-El proyecto sigue una **Arquitectura Hexagonal** (Ports & Adapters) con las siguientes capas:
+### 1. `SigmabotSync.Domain` (Núcleo - Puertos)
 
-### 1. **SigmabotSync.Domain** (Núcleo - Puertos)
-**Puertos (Interfaces)** que definen los contratos que el dominio necesita:
-- `IExternalApiClient` - Puerto para comunicación con APIs externas
-- `IProjectService` - Puerto para servicios de proyectos
+**Puertos (interfaces)** que definen los contratos que el dominio necesita del exterior:
 
-**Entidades y Modelos del Dominio**:
-- `Project` - Entidad que representa un proyecto de Aconex
-- `DocumentMetadata` - Modelo con metadatos completos de un documento (serialización XML)
-- `DocumentIntegrityInfo` - Modelo con información de integridad (ID, fechas de modificación)
-- `UserInfo` - Modelo con información de usuario
-- `AconexSettings` - Configuración de credenciales (será migrada a BD)
+- `IAconexHttpGetPort` - Operaciones HTTP GET genéricas contra Aconex.
+- `IAconexRegisterSearchPort` - Búsquedas en el register de Aconex.
+- `IAconexRegisterDocumentContentPort` - Descarga de contenido de documentos.
+- `IAconexRegisterWritePort` - Escritura/creación de documentos en el register.
+- `IDocumentSyncReadPort` - Lectura para el flujo de sincronización.
 
-### 2. **SigmabotSync.Application** (Casos de Uso)
-**Casos de uso organizados por funcionalidad**:
+**Entidades del dominio**:
 
-#### **Extraction/** (Extracción de Documentos)
-- *Pendiente de implementación* - Lógica para extraer documentos desde Aconex
+- `Project` - Proyecto de Aconex.
+- `Credencial` - Credencial de acceso (Aconex u otros sistemas).
+- `Trabajo`, `TrabajoConfiguracion`, `TrabajoProgramacion`, `TrabajoEjecucion` - Modelo de "trabajos" del scheduler.
 
-#### **Synchronization/** (Sincronización de Documentos)
-- `DocumentSyncWorker` - Worker que orquesta el proceso de sincronización con eventos de progreso
-- `DocumentService` - Servicio de aplicación para operaciones con documentos
-- `ProjectService` - Servicio de aplicación para operaciones con proyectos
+**Modelos**:
 
-#### **Common/** (Compartido)
-- *Pendiente* - Utilidades y lógica compartida entre casos de uso
+- `DocumentMetadata`, `DocumentIntegrityInfo`, `UserInfo`.
+- `Models/Extraction/*` - DTOs específicos para los flujos de extracción.
 
-### 3. **SigmabotSync.Infrastructure** (Adaptadores de Salida)
-**Adaptadores que implementan los puertos del dominio**:
+**Configuration**:
 
-- **Clientes Aconex** (Adaptadores de API Externa):
-  - `AconexClientBase` - Clase base con autenticación HTTP Basic y header `X-Application-Key`
-  - `AconexDocumentClient` - Implementa operaciones con documentos (obtener documentos modificados, metadatos)
-  - `AconexProjectClient` - Implementa operaciones con proyectos
-  - `AconexUserClient` - Implementa operaciones con usuarios
+- Validadores y catálogos: `CredencialRequisitosValidator`, `TrabajoRequisitosValidator`, `TrabajoConfiguracionParamValidator`, `TrabajoTipoConfigFieldCatalog`, `CredencialTipoIds`, `TipoTrabajoIds`, `TrabajoEstadoIds`.
 
-- **Servicios de Infraestructura**:
-  - `SettingsService` - Adaptador para gestión de configuración (actualmente `settings.json`, migrar a BD)
+### 2. `SigmabotSync.Application` (Casos de Uso)
 
-### 4. **SigmabotSync.UI** (Adaptador de Entrada - ⚠️ Deprecado)
-> **Estado**: Esta capa será deprecada. La configuración se leerá desde base de datos.
+#### `Synchronization/`
 
-- `MainForm` - Formulario principal (deprecado)
-- `ConfigForm` - Formulario de configuración (deprecado)
+- `DocumentSyncWorker` - Orquesta la sincronización con eventos de progreso.
+- `DocumentService` - Servicio de aplicación para operaciones con documentos.
+
+#### `Extraction/`
+
+- `DocumentExtractionWorker` - Extracción de documentos.
+- `IncidentExtractionWorker` - Extracción de incidentes.
+- `MailExtractionWorker` - Extracción de correos.
+- `WorkflowExtractionWorker` - Extracción de workflows.
+
+#### `FileExtraction/`
+
+- `FileExtractionWorker` - Descarga de archivos.
+- `FileUploadWithMetadataWorker` - Subida de archivos con metadatos asociados.
+
+#### `Services/`
+
+- `ProjectService` - Servicio de aplicación para operaciones con proyectos.
+
+#### `Common/`
+
+- `AconexRegisterMultipart` - Helper de construcción multipart para Aconex.
+- `AppState` - Estado compartido entre workers.
+- `Utilities` - Utilidades transversales.
+
+### 3. `SigmabotSync.Infrastructure` (Adaptadores de Salida)
+
+#### `External/` (Adaptadores HTTP de Aconex)
+
+- `AconexClientBase` - Clase base con autenticación Basic + header `X-Application-Key`.
+- `AconexDocumentClient`, `AconexProjectClient`, `AconexUserClient` - Clientes legacy.
+- `AconexHttpGetAdapter` - Implementa `IAconexHttpGetPort`.
+- `AconexRegisterSearchAdapter` - Implementa `IAconexRegisterSearchPort`.
+- `AconexRegisterDocumentContentAdapter` - Implementa `IAconexRegisterDocumentContentPort`.
+- `AconexRegisterWriteAdapter` - Implementa `IAconexRegisterWritePort`.
+- `AconexDocumentSyncAdapter`, `AconexExternalProjectAdapter` - Adaptadores adicionales para los flujos de sync.
+
+#### `Services/` (Acceso a BD y configuración)
+
+- `SettingsService` - Lectura del `settings.json` (sólo cadena de conexión).
+- `ConnectionStringHelper` - Construcción/validación de la cadena de conexión a SQL Server.
+- `CredencialesService` - CRUD de credenciales en BD.
+- `TrabajosService`, `TrabajosProgramacionService`, `TrabajosEjecucionService` - CRUD del modelo de trabajos.
+- `ConfigurationEditor/` - Servicios auxiliares para edición de configuración.
+
+#### `Data/`
+
+- `SqlDataReaderMapper` - Helper de mapeo de `SqlDataReader` a entidades del dominio.
+
+### 4. Adaptadores de Entrada
+
+| Proyecto | Tipo | Descripción |
+|---|---|---|
+| `SigmabotSync.Console` | Console app (.NET 8) | Runner principal. Ejecuta los trabajos programados (typically como Tarea Programada de Windows). |
+| `SigmabotSync.ConfigTool` | WPF (.NET 8 Windows) | Herramienta de escritorio para configurar credenciales, trabajos y su programación. |
+| `SigmabotSync.ConfigWeb` | Blazor Server (.NET 8) | Versión web de la herramienta de configuración (UI sobre MudBlazor). |
+| `SigmabotSync.Tools.NetShareSmokeTest` | Console (.NET 8) | Utilidad de diagnóstico para validar accesos a network shares usados por los workers. |
 
 ## Casos de Uso
 
-### 1. Extracción de Documentos (Extraction)
-**Estado**: Pendiente de implementación
+### Sincronización de Documentos
 
-Este caso de uso se encargará de:
-- Extraer documentos desde proyectos de Aconex
-- Procesar y almacenar documentos extraídos
-- Gestionar el ciclo de vida de la extracción
+1. Consulta `/register/integrity` para obtener documentos modificados desde una fecha.
+2. Obtiene metadatos completos de cada documento desde `/register/{documentId}/metadata`.
+3. El worker emite eventos de progreso para logging y monitoreo.
+4. Actualiza el documento en el proyecto destino.
 
-### 2. Sincronización de Documentos (Synchronization)
-**Estado**: Parcialmente implementado
+### Extracción (Documentos / Incidentes / Mails / Workflows)
 
-Flujo actual de sincronización:
-1. **Obtención de documentos modificados**: Consulta la API de Aconex para obtener documentos modificados desde una fecha específica usando el endpoint de integridad (`/register/integrity`)
-2. **Obtención de metadatos**: Para cada documento modificado, obtiene sus metadatos completos desde el endpoint `/register/{documentId}/metadata`
-3. **Procesamiento**: El worker procesa cada documento y emite eventos de progreso y estado
-4. **Actualización en destino**: ⏳ Pendiente de implementación (`UpdateDocumentOnDestinationAsync`)
+Cada worker recorre el proyecto origen, descarga los recursos pertinentes y los guarda en la ruta destino configurada (típicamente un network share).
 
-### Gestión de Proyectos
-- Obtención de proyectos disponibles del usuario desde Aconex
-- Validación de proyectos origen y destino
+### Carga de archivos con metadatos
 
-### Configuración
-- **Actual**: Almacenamiento de credenciales en `settings.json` (temporal)
-- **Futuro**: Configuración desde base de datos (migración pendiente)
+`FileUploadWithMetadataWorker` toma archivos desde una ruta de entrada, construye los metadatos asociados (desde Excel/CSV/BD según configuración) y los sube al register de Aconex.
+
+### Gestión de Trabajos
+
+- Definición del tipo de trabajo + parámetros (`TrabajoConfiguracion`).
+- Programación (`TrabajoProgramacion`).
+- Registro histórico de ejecuciones (`TrabajoEjecucion`).
+- Validación de requisitos al crear/editar trabajos.
 
 ## Tecnologías y Dependencias
 
-- **.NET Framework 4.8**
-- **Newtonsoft.Json** (v13.0.4) - Serialización JSON para configuración (temporal)
-- **System.Net.Http** - Cliente HTTP para comunicación con API de Aconex
-- **System.Xml.Serialization** - Deserialización de respuestas XML de Aconex
-- **Windows Forms** - ⚠️ Deprecado (solo para desarrollo/tests)
+- **.NET 8.0** (`net8.0` y `net8.0-windows` para WPF).
+- **Microsoft.Data.SqlClient** `5.2.2` - Acceso a SQL Server.
+- **Newtonsoft.Json** `13.0.3` - Serialización JSON (`settings.json`, payloads).
+- **CommunityToolkit.Mvvm** `8.2.2` - MVVM en `ConfigTool` y `ConfigWeb`.
+- **MudBlazor** `7.16.0` - UI de `ConfigWeb`.
+- **WPF** - UI de `ConfigTool`.
+- **System.Net.Http** / **System.Xml.Serialization** (BCL) - Cliente HTTP y deserialización de respuestas XML de Aconex.
 
-## Estado del Proyecto
-
-### Implementado ✅
-- Arquitectura hexagonal con puertos y adaptadores
-- Autenticación con API de Aconex
-- Obtención de proyectos del usuario
-- Obtención de documentos modificados desde una fecha
-- Obtención de metadatos de documentos
-- Worker de sincronización con eventos de progreso
-- Gestión de configuración temporal (JSON)
-
-### En Desarrollo / Pendiente ⏳
-
-#### Sincronización
-- Actualización de documentos en el proyecto destino (`UpdateDocumentOnDestinationAsync`)
-- Descarga de archivos de documentos
-- Subida de archivos al proyecto destino
-
-#### Extracción
-- Implementación completa del caso de uso de extracción
-- Lógica de procesamiento de documentos extraídos
-
-#### Infraestructura
-- Migración de configuración desde JSON a base de datos
-- Adaptador de base de datos para configuración
-- Manejo de errores más robusto
-- Logging estructurado
-- Validaciones adicionales
-
-#### UI
-- Deprecación completa de la capa UI
+> Todas las versiones están **fijas** (sin rangos). Los `packages.lock.json` (uno por proyecto) garantizan restore reproducible. Ver sección [Seguridad y Builds Reproducibles](#seguridad-y-builds-reproducibles).
 
 ## Estructura de Directorios
 
 ```
 SigmabotSync/
-├── SigmabotSync.Domain/              # Núcleo - Puertos (interfaces), Entidades, Modelos
-│   ├── Interfaces/                   # Puertos (contratos)
-│   ├── Entities/                     # Entidades del dominio
-│   ├── Models/                       # Modelos de dominio
-│   └── Config/                       # Configuración (temporal)
+├── SigmabotSync.Domain/                    # Núcleo: puertos, entidades, modelos, validadores
+│   ├── Ports/                              # Interfaces (puertos de salida)
+│   ├── Interfaces/                         # Interfaces legacy
+│   ├── Entities/                           # Entidades del dominio
+│   ├── Models/                             # Modelos y DTOs (incluye Models/Extraction)
+│   ├── Configuration/                      # Validadores y catálogos
+│   └── Config/                             # Config legacy
 │
-├── SigmabotSync.Application/         # Casos de Uso
-│   ├── Extraction/                   # Caso de uso: Extracción de documentos
-│   ├── Synchronization/              # Caso de uso: Sincronización de documentos
-│   │   └── DocumentSyncWorker.cs     # Worker de sincronización
-│   ├── Common/                       # Utilidades compartidas
-│   └── Services/                     # Servicios de aplicación
+├── SigmabotSync.Application/               # Casos de uso
+│   ├── Synchronization/                    # Sincronización de documentos
+│   ├── Extraction/                         # Extracción (docs, incidentes, mails, workflows)
+│   ├── FileExtraction/                     # Descarga/Subida de archivos con metadatos
+│   ├── Services/                           # Servicios de aplicación
+│   └── Common/                             # Helpers compartidos
 │
-├── SigmabotSync.Infrastructure/      # Adaptadores de Salida
-│   ├── External/                     # Adaptadores de APIs externas (Aconex)
-│   └── Services/                     # Adaptadores de servicios (configuración, BD futura)
+├── SigmabotSync.Infrastructure/            # Adaptadores de salida
+│   ├── External/                           # Clientes/adaptadores HTTP de Aconex
+│   ├── Services/                           # Acceso a BD (credenciales, trabajos, config)
+│   └── Data/                               # Helpers de mapeo SQL
 │
-├── SigmabotSync.UI/                  # ⚠️ Adaptador de Entrada (Deprecado)
-│   └── [Formularios Windows Forms]
+├── SigmabotSync.Console/                   # Runner principal (Tarea Programada)
+├── SigmabotSync.ConfigTool/                # UI de configuración (WPF)
+├── SigmabotSync.ConfigWeb/                 # UI de configuración (Blazor + MudBlazor)
+├── SigmabotSync.Tools.NetShareSmokeTest/   # Utilidad de diagnóstico de shares
 │
-└── README.md                          # Este archivo
+├── Scripts/                                # DDL de SQL Server (Credenciales, Trabajos, etc.)
+├── postman/                                # Colecciones Postman de Aconex
+├── deployment/                             # Scripts e instructivos de despliegue
+├── .github/workflows/                      # CI/CD (a definir)
+├── SigmabotSync.sln
+└── README.md
 ```
-
-## Principios de Arquitectura Hexagonal
-
-### Puertos (Domain)
-- **Puertos de Salida**: Interfaces que el dominio necesita para interactuar con el exterior (ej: `IExternalApiClient`)
-- **Puertos de Entrada**: Interfaces que definen cómo el exterior interactúa con el dominio (futuro)
-
-### Adaptadores (Infrastructure/UI)
-- **Adaptadores de Salida**: Implementaciones concretas de los puertos de salida (ej: `AconexDocumentClient`)
-- **Adaptadores de Entrada**: Puntos de entrada al sistema (ej: UI, API REST futura, workers)
-
-### Beneficios
-- **Independencia**: El dominio no depende de implementaciones concretas
-- **Testabilidad**: Fácil mockear adaptadores para tests
-- **Flexibilidad**: Cambiar infraestructura sin afectar el dominio
-- **Separación de responsabilidades**: Casos de uso claramente separados (Extraction vs Synchronization)
 
 ## Configuración
 
-### Actual (Temporal)
-- Configuración almacenada en `settings.json` en el directorio de ejecución
-- Credenciales: Usuario, Contraseña, Integration ID de Aconex
+### Conexión a base de datos
 
-### Futuro
-- Configuración desde base de datos
-- Múltiples configuraciones por proyecto/sesión
-- Gestión centralizada de credenciales
+Cada ejecutable lee la cadena de conexión desde su `settings.json` local. Ejemplo:
+
+```json
+{
+  "ConnectionString": "Server=...;Database=SigmabotSync;..."
+}
+```
+
+### Credenciales y trabajos
+
+Toda la configuración funcional (credenciales de Aconex, definición de trabajos, programaciones, parámetros) vive en **SQL Server**. Se edita desde:
+
+- `SigmabotSync.ConfigTool` (WPF, escritorio).
+- `SigmabotSync.ConfigWeb` (Blazor, web).
+
+El DDL de las tablas está en `Scripts/`:
+
+- `CreateTable_Credenciales.sql`
+- `CreateTable_Documentos.sql`
+- `CreateTable_Trabajos.sql`
+- `CreateTable_TrabajosConfiguracion.sql`
+- `CreateTable_TrabajosEjecucion.sql`
+- `CreateTable_TrabajosProgramacion.sql`
+- `Alter_TrabajosEjecucion_FechaHoraFin_Nullable.sql`
+
+## Seguridad y Builds Reproducibles
+
+Para alinearnos con los estándares de seguridad del cliente (escaneo con Semgrep/Trivy y exigencia de instalación reproducible tipo `npm ci`), la solución tiene activada la siguiente configuración:
+
+### `packages.lock.json` + `RestorePackagesWithLockFile`
+
+Todos los `.csproj` declaran:
+
+```xml
+<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+```
+
+Esto genera un archivo `packages.lock.json` al lado de cada `.csproj`, con las versiones exactas (directas y transitivas) y su `contentHash`. **Estos archivos están versionados en git** y no deben agregarse al `.gitignore`.
+
+### Restore reproducible en CI
+
+En cualquier pipeline (CI, build local de despliegue) se debe usar:
+
+```bash
+dotnet restore SigmabotSync.sln --locked-mode
+```
+
+`--locked-mode` falla el build si las versiones resueltas no coinciden con el `packages.lock.json`. Esto detecta:
+
+- Cambios manuales de versión sin actualizar el lock.
+- Paquetes alterados/republicados en NuGet.org.
+
+### Flujo de trabajo al agregar/actualizar paquetes
+
+1. Hacer el cambio en el `.csproj` o vía `dotnet add package <nombre> --version <X.Y.Z>`.
+2. Correr `dotnet restore` (sin `--locked-mode`) → actualiza el `packages.lock.json` automáticamente.
+3. **Commitear ambos archivos** (`.csproj` + `packages.lock.json`) juntos.
+
+### Verificación de vulnerabilidades
+
+Antes de pedir paso a QA/Producción conviene correr localmente:
+
+```bash
+dotnet list package --vulnerable --include-transitive
+```
+
+Y resolver cualquier paquete reportado antes de que lo marque Trivy en el pipeline del cliente.
 
 ## Notas Técnicas
 
-- **Autenticación**: HTTP Basic Authentication con Base64 + header `X-Application-Key`
-- **Formato de respuestas**: Aconex devuelve XML, se deserializa a modelos del dominio
-- **Eventos**: El worker utiliza eventos para notificar progreso (útil para logging/monitoreo futuro)
-- **API Base**: `https://us1.aconex.com/api/`
+- **Autenticación Aconex**: HTTP Basic (Base64) + header `X-Application-Key`.
+- **Respuestas Aconex**: XML, deserializadas con `System.Xml.Serialization` a modelos del dominio.
+- **Eventos de progreso**: los workers exponen eventos para logging/monitoreo (`DailyLog` en `SigmabotSync.Console`).
+- **API Base**: `https://us1.aconex.com/api/`.
 - **Endpoints principales**:
-  - `/projects` - Lista de proyectos
-  - `/projects/{projectId}/register/integrity` - Documentos modificados
-  - `/projects/{projectId}/register/{documentId}/metadata` - Metadatos de documento
+  - `/projects` - Lista de proyectos del usuario.
+  - `/projects/{projectId}/register/integrity` - Documentos modificados.
+  - `/projects/{projectId}/register/{documentId}/metadata` - Metadatos de documento.
+  - `/projects/{projectId}/register/search` - Búsqueda en el register.
+
+## Despliegue
+
+La carpeta `deployment/` contiene scripts e instructivos:
+
+- `install-task.bat` - Registra `SigmabotSync.Console` como Tarea Programada de Windows.
+- `uninstall-task.bat` - La elimina.
+- `run-sigmabot.bat` - Ejecución manual.
+- `README-OPERACION.md` / `.html` / `.pdf` - Instructivo operativo.
