@@ -128,9 +128,9 @@ Cada worker recorre el proyecto origen, descarga los recursos pertinentes y los 
 ## Tecnologías y Dependencias
 
 - **.NET 8.0** (`net8.0` y `net8.0-windows` para WPF).
-- **Microsoft.Data.SqlClient** `5.2.2` - Acceso a SQL Server.
-- **Newtonsoft.Json** `13.0.3` - Serialización JSON (`settings.json`, payloads).
-- **CommunityToolkit.Mvvm** `8.2.2` - MVVM en `ConfigTool` y `ConfigWeb`.
+- **Microsoft.Data.SqlClient** `5.2.3` - Acceso a SQL Server.
+- **Newtonsoft.Json** `13.0.4` - Serialización JSON (`settings.json`, payloads).
+- **CommunityToolkit.Mvvm** `8.4.2` - MVVM en `ConfigTool` y `ConfigWeb`.
 - **MudBlazor** `7.16.0` - UI de `ConfigWeb`.
 - **WPF** - UI de `ConfigTool`.
 - **System.Net.Http** / **System.Xml.Serialization** (BCL) - Cliente HTTP y deserialización de respuestas XML de Aconex.
