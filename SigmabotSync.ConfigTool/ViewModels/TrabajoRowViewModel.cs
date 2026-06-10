@@ -16,12 +16,9 @@ namespace SigmabotSync.ConfigTool.ViewModels
             vm.Id = t.Id;
             vm.Nombre = t.Nombre;
             vm.Tipo = t.Tipo;
-            vm.Perioricidad = t.Perioricidad;
-            vm.FechaUltimaEjecucion = t.FechaUltimaEjecucion;
-            vm.FechaProximaEjecucion = t.FechaProximaEjecucion;
-            vm.ResultadoUltimaEjecucion = t.ResultadoUltimaEjecucion;
-            vm.ControldeEjecucion = t.ControldeEjecucion;
             vm.Estado = t.Estado;
+            vm.FechaUltimaEjecucion = t.FechaUltimaEjecucion;
+            vm.ResultadoUltimaEjecucion = t.ResultadoUltimaEjecucion;
             vm.UltCorrEjecucion = t.UltCorrEjecucion;
             return vm;
         }
@@ -33,13 +30,7 @@ namespace SigmabotSync.ConfigTool.ViewModels
                 Id = Id,
                 Nombre = Nombre,
                 Tipo = Tipo,
-                Perioricidad = Perioricidad,
-                FechaUltimaEjecucion = FechaUltimaEjecucion,
-                FechaProximaEjecucion = FechaProximaEjecucion,
-                ResultadoUltimaEjecucion = ResultadoUltimaEjecucion,
-                ControldeEjecucion = ControldeEjecucion,
-                Estado = Estado,
-                UltCorrEjecucion = UltCorrEjecucion
+                Estado = Estado
             };
         }
 
@@ -51,12 +42,9 @@ namespace SigmabotSync.ConfigTool.ViewModels
         [NotifyPropertyChangedFor(nameof(EtiquetaLista))]
         private string _nombre;
         [ObservableProperty] private string _tipo;
-        [ObservableProperty] private string _perioricidad;
-        [ObservableProperty] private DateTime? _fechaUltimaEjecucion;
-        [ObservableProperty] private DateTime? _fechaProximaEjecucion;
-        [ObservableProperty] private string _resultadoUltimaEjecucion;
-        [ObservableProperty] private string _controldeEjecucion;
         [ObservableProperty] private string _estado;
+        [ObservableProperty] private DateTime? _fechaUltimaEjecucion;
+        [ObservableProperty] private string _resultadoUltimaEjecucion;
         [ObservableProperty] private string _ultCorrEjecucion;
     }
 }

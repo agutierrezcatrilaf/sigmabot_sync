@@ -18,8 +18,17 @@ namespace SigmabotSync.Domain.Entities
         /// <summary>Nombre del proyecto para logs (desde TrabajosConfiguracion Nombre=Proyecto, ej. SalfaDemo).</summary>
         public string Proyecto { get; set; }
 
-        /// <summary>ID del proyecto Aconex (reemplaza ProjectId del settings).</summary>
+        /// <summary>ID del proyecto Aconex (lado 1 del par de sincronización).</summary>
         public string IdProyecto { get; set; }
+
+        /// <summary>ID del segundo proyecto Aconex del par (opcional hasta configurar el par completo).</summary>
+        public string IdProyecto2 { get; set; }
+
+        /// <summary>Nombre para logs del segundo proyecto (TrabajosConfiguracion Nombre=Proyecto2).</summary>
+        public string Proyecto2 { get; set; }
+
+        /// <summary>Días hacia atrás para buscar transmitals en inbox (TrabajosConfiguracion Nombre=DiasLookbackTransmittal). Default 30.</summary>
+        public int? DiasLookbackTransmittal { get; set; }
 
         /// <summary>Nombres de campos para la consulta API (returnFields). Comma-separated o JSON array. Orden = CamposResponse y CamposBD.</summary>
         public string CamposConsulta { get; set; }
@@ -33,8 +42,11 @@ namespace SigmabotSync.Domain.Entities
         /// <summary>Ruta base para extracción de archivos (desde TrabajosConfiguracion Nombre=BasePath).</summary>
         public string BasePath { get; set; }
 
-        /// <summary>Nombre de la tabla de metadata en la BD (desde TrabajosConfiguracion Nombre=TablaMetadata). FileUploadWithMetadata requiere columna <c>NombreArchivo</c> (archivo en BasePath).</summary>
+        /// <summary>Nombre de la tabla de metadata en la BD (desde TrabajosConfiguracion Nombre=TablaMetadata). Ej. <c>DocumentosMetadata</c>.</summary>
         public string TablaMetadata { get; set; }
+
+        /// <summary>Tabla de rutas físicas enlazada por <c>DocumentoId</c> (desde TrabajosConfiguracion Nombre=TablaPaths). Ej. <c>DocumentosPath</c>.</summary>
+        public string TablaPaths { get; set; }
 
         /// <summary>Id de la credencial Aconex en tabla Credenciales (desde TrabajosConfiguracion Nombre=CredencialAconex).</summary>
         public int? CredencialAconexId { get; set; }
@@ -68,6 +80,24 @@ namespace SigmabotSync.Domain.Entities
                 });
             }
             return list;
+        }
+
+        /// <summary>Proyectos del par de sincronización (simétrico; orden sin significado de dirección).</summary>
+        public List<ProyectoSyncItem> GetProyectosSync()
+        {
+            var list = new List<ProyectoSyncItem>(2);
+            if (!string.IsNullOrWhiteSpace(IdProyecto))
+                list.Add(new ProyectoSyncItem(IdProyecto.Trim(), string.IsNullOrWhiteSpace(Proyecto) ? IdProyecto.Trim() : Proyecto.Trim()));
+            if (!string.IsNullOrWhiteSpace(IdProyecto2))
+                list.Add(new ProyectoSyncItem(IdProyecto2.Trim(), string.IsNullOrWhiteSpace(Proyecto2) ? IdProyecto2.Trim() : Proyecto2.Trim()));
+            return list;
+        }
+
+        public int ResolverDiasLookbackTransmittal()
+        {
+            if (DiasLookbackTransmittal.HasValue && DiasLookbackTransmittal.Value > 0)
+                return DiasLookbackTransmittal.Value;
+            return 30;
         }
 
         /// <summary>

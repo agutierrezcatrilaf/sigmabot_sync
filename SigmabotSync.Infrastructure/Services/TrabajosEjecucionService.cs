@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Data.SqlClient;
+using SigmabotSync.Domain.Entities;
 
 namespace SigmabotSync.Infrastructure.Services
 {
@@ -142,6 +143,68 @@ namespace SigmabotSync.Infrastructure.Services
                     cmd.ExecuteNonQuery();
                 }
             }
+        }
+
+        /// <summary>
+        /// Historial de ejecuciones de un trabajo, más recientes primero.
+        /// </summary>
+        public IReadOnlyList<TrabajoEjecucion> ListarPorIdTrabajo(int idTrabajo, int limit = 50)
+        {
+            if (limit <= 0)
+                limit = 50;
+            if (limit > 200)
+                limit = 200;
+
+            const string sql = @"
+                SELECT Id, IdTrabajo, FechaHoraInicio, FechaHoraFin, Exito, MensajeError,
+                       EtapasEjecutadas, DetalleEjecucion, TipoEjecucion
+                FROM [dbo].[TrabajosEjecucion] WITH (NOLOCK)
+                WHERE IdTrabajo = @IdTrabajo
+                ORDER BY FechaHoraInicio DESC
+                OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+            var lista = new List<TrabajoEjecucion>();
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    cmd.Parameters.AddWithValue("@Limit", limit);
+                    using (var rdr = cmd.ExecuteReader())
+                    {
+                        while (rdr.Read())
+                            lista.Add(LeerEjecucion(rdr));
+                    }
+                }
+            }
+            return lista;
+        }
+
+        private static TrabajoEjecucion LeerEjecucion(SqlDataReader rdr)
+        {
+            return new TrabajoEjecucion
+            {
+                Id = rdr.GetInt32(rdr.GetOrdinal("Id")),
+                IdTrabajo = rdr.GetInt32(rdr.GetOrdinal("IdTrabajo")),
+                FechaHoraInicio = rdr.GetDateTime(rdr.GetOrdinal("FechaHoraInicio")),
+                FechaHoraFin = rdr.IsDBNull(rdr.GetOrdinal("FechaHoraFin"))
+                    ? (DateTime?)null
+                    : rdr.GetDateTime(rdr.GetOrdinal("FechaHoraFin")),
+                Exito = rdr.GetBoolean(rdr.GetOrdinal("Exito")),
+                MensajeError = rdr.IsDBNull(rdr.GetOrdinal("MensajeError"))
+                    ? null
+                    : rdr.GetString(rdr.GetOrdinal("MensajeError")),
+                EtapasEjecutadas = rdr.IsDBNull(rdr.GetOrdinal("EtapasEjecutadas"))
+                    ? null
+                    : rdr.GetString(rdr.GetOrdinal("EtapasEjecutadas")),
+                DetalleEjecucion = rdr.IsDBNull(rdr.GetOrdinal("DetalleEjecucion"))
+                    ? null
+                    : rdr.GetString(rdr.GetOrdinal("DetalleEjecucion")),
+                TipoEjecucion = rdr.IsDBNull(rdr.GetOrdinal("TipoEjecucion"))
+                    ? null
+                    : rdr.GetString(rdr.GetOrdinal("TipoEjecucion"))
+            };
         }
 
         /// <summary>

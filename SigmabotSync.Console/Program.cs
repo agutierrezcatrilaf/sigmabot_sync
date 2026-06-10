@@ -21,7 +21,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 2;
+        private static readonly int? DebugIdTrabajo = 4;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -505,7 +505,7 @@ namespace SigmabotSync.Console
         }
 
         /// <summary>
-        /// Ejecuta ProjectSync: sincronización de documentos modificados (RunAsync de DocumentSyncWorker en Synchronization).
+        /// Ejecuta ProjectSync: sincronización por transmitals (inbox de cada proyecto del par).
         /// </summary>
         private static async Task EjecutarProjectSyncAsync(
             TrabajoConfiguracion trabajoConfig,
@@ -513,34 +513,45 @@ namespace SigmabotSync.Console
             Credencial credBd,
             List<string> etapasEjecutadas)
         {
-            string projectId = trabajoConfig.IdProyecto ?? string.Empty;
-            // Sincronizar documentos modificados desde hace 1 día (se puede parametrizar después en TrabajosConfiguracion)
-            DateTime since = DateTime.UtcNow.AddDays(-1);
+            var proyectos = trabajoConfig.GetProyectosSync();
+            string auth = SigmabotSync.Application.Common.Utilities.EncodeTexto(
+                (credAconex.Aconex_Usuario ?? "") + ":" + (credAconex.Aconex_Clave ?? ""));
+            string baseUrl = credAconex.GetAconexBaseUrl();
+            int diasLookback = trabajoConfig.ResolverDiasLookbackTransmittal();
+            string bdConnection = credBd.GetConnectionString();
 
             SigmabotSync.Application.Common.Utilities.Wlog("Configuración ProjectSync (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
-            SigmabotSync.Application.Common.Utilities.Wlog($"  IdProyecto={projectId}, Since={since:yyyy-MM-dd HH:mm:ss} UTC", 0);
+            foreach (var p in proyectos)
+                SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto: {p.Label} ({p.ProjectId})", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  DiasLookbackTransmittal={diasLookback}", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
-            var aconexDocumentClient = new AconexDocumentClient(
-                credAconex.Aconex_Usuario ?? "",
-                credAconex.Aconex_Clave ?? "",
-                credAconex.Aconex_IntegrationId ?? "");
-            IDocumentSyncReadPort documentSyncRead = new AconexDocumentSyncAdapter(aconexDocumentClient);
+            var httpGet = new AconexHttpGetAdapter();
+            IMailTransmittalReadPort mailRead = new AconexMailTransmittalAdapter(httpGet);
+            ITransmittalSyncStatePort syncState = new TransmittalSyncStateService(bdConnection);
+
             using (var registerWritePort = new AconexRegisterWriteAdapter())
+            using (var contentPort = new AconexRegisterDocumentContentAdapter())
             {
-                var documentService = new DocumentService(documentSyncRead, registerWritePort);
-                var syncWorker = new DocumentSyncWorker(documentService);
+                var syncService = new TransmittalSyncService(mailRead, registerWritePort, contentPort, syncState);
+                var syncWorker = new TransmittalSyncWorker(syncService);
 
-                syncWorker.OnProgress += (current, total) =>
+                syncWorker.OnStatus += status =>
                 {
-                    SigmabotSync.Application.Common.Utilities.Wlog($"[Progreso] Documento {current} de {total}", 0);
-                };
-                syncWorker.OnStatus += (status) =>
-                {
-                    SigmabotSync.Application.Common.Utilities.Wlog($"[Estado] {status}", 0);
+                    SigmabotSync.Application.Common.Utilities.Wlog($"[ProjectSync] {status}", 0);
                 };
 
-                await syncWorker.RunAsync(projectId, since);
+                var request = new TransmittalSyncRunRequest
+                {
+                    IdTrabajo = trabajoConfig.IdTrabajo,
+                    BaseUrl = baseUrl,
+                    AuthorizationHeaderBase64 = auth,
+                    IntegrationId = credAconex.Aconex_IntegrationId ?? "",
+                    DiasLookback = diasLookback,
+                    Proyectos = proyectos
+                };
+
+                await syncWorker.RunAsync(request);
                 etapasEjecutadas.Add("ProjectSync");
             }
         }
@@ -599,7 +610,7 @@ namespace SigmabotSync.Console
         }
 
         /// <summary>
-        /// Ejecuta FileUploadWithMetadata: lee tabla de metadata (CredencialBD + TablaMetadata), enlaza archivos en BasePath por NombreArchivo y envía a Aconex.
+        /// Ejecuta FileUploadWithMetadata: lee DocumentosMetadata + DocumentosPath (CredencialBD) y envía a Aconex.
         /// </summary>
         private static async Task EjecutarFileUploadWithMetadataAsync(
             TrabajoConfiguracion trabajoConfig,
@@ -610,12 +621,13 @@ namespace SigmabotSync.Console
             string projectId = trabajoConfig.IdProyecto ?? string.Empty;
             string projectName = !string.IsNullOrWhiteSpace(trabajoConfig.Proyecto) ? trabajoConfig.Proyecto.Trim() : "Proyecto";
             string basePath = !string.IsNullOrWhiteSpace(trabajoConfig.BasePath) ? trabajoConfig.BasePath.Trim() : null;
-            string tablaMetadata = !string.IsNullOrWhiteSpace(trabajoConfig.TablaMetadata) ? trabajoConfig.TablaMetadata.Trim() : null;
+            string tablaMetadata = FileUploadWithMetadataDefaults.ResolverTablaMetadata(trabajoConfig.TablaMetadata);
+            string tablaPaths = FileUploadWithMetadataDefaults.ResolverTablaPaths(trabajoConfig.TablaPaths);
 
             SigmabotSync.Application.Common.Utilities.Wlog("Configuración FileUploadWithMetadata (IdTrabajo=" + trabajoConfig.IdTrabajo + "):", 0);
-            SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto={projectName}, IdProyecto={projectId}, BasePath={basePath ?? "(no configurado)"}, TablaMetadata={tablaMetadata ?? "(no configurado)"}", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto={projectName}, IdProyecto={projectId}, TablaMetadata={tablaMetadata}, TablaPaths={tablaPaths}", 0);
             SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial Aconex: {credAconex.Nombre} ({credAconex.Aconex_Instancia})", 0);
-            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre}", 0);
+            SigmabotSync.Application.Common.Utilities.Wlog($"  Credencial BD: {credBd.Nombre} → {credBd.BD_Servidor}/{credBd.BD_BaseDatos}", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             using (var registerWritePort = new AconexRegisterWriteAdapter())
@@ -682,14 +694,14 @@ namespace SigmabotSync.Console
             string tipoTrabajo = (trabajoConfig.TipoTrabajo ?? "").Trim();
             if (tipoTrabajo == TipoTrabajoIds.FileUploadWithMetadata)
             {
-                if (string.IsNullOrWhiteSpace(trabajoConfig.TablaMetadata))
+                string tablaMetadata = FileUploadWithMetadataDefaults.ResolverTablaMetadata(trabajoConfig.TablaMetadata);
+                string tablaPaths = FileUploadWithMetadataDefaults.ResolverTablaPaths(trabajoConfig.TablaPaths);
+                if (!string.Equals(tablaMetadata, FileUploadWithMetadataDefaults.TablaMetadata, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(tablaPaths, FileUploadWithMetadataDefaults.TablaPaths, StringComparison.OrdinalIgnoreCase))
                 {
-                    SigmabotSync.Application.Common.Utilities.Wlog("ERROR: FileUploadWithMetadata requiere TablaMetadata en TrabajosConfiguracion.", 0);
-                    return null;
-                }
-                if (string.IsNullOrWhiteSpace(trabajoConfig.BasePath))
-                {
-                    SigmabotSync.Application.Common.Utilities.Wlog("ERROR: FileUploadWithMetadata requiere BasePath en TrabajosConfiguracion.", 0);
+                    SigmabotSync.Application.Common.Utilities.Wlog(
+                        "ERROR: FileUploadWithMetadata requiere TablaMetadata=" + FileUploadWithMetadataDefaults.TablaMetadata
+                        + " y TablaPaths=" + FileUploadWithMetadataDefaults.TablaPaths + ".", 0);
                     return null;
                 }
             }

@@ -13,24 +13,52 @@ namespace SigmabotSync.Domain.Configuration
         {
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.IdProyecto,
-                "Id proyecto Aconex",
-                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                ayuda: "ProjectId en Aconex (numérico)."),
+                "Id proyecto Aconex (lado 1)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                ayuda: "ProjectId en Aconex (numérico). En ProjectSync es el primer proyecto del par."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.IdProyecto2,
+                "Id proyecto Aconex (lado 2)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Segundo proyecto del par. Opcional hasta tener el Id; cuando esté configurado se procesará su inbox también."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.Proyecto,
+                "Nombre proyecto 1 (logs)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Opcional; mejora logs."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.Proyecto2,
+                "Nombre proyecto 2 (logs)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Etiqueta opcional para el segundo proyecto del par."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.DiasLookbackTransmittal,
+                "Días lookback transmitals",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Días hacia atrás para buscar transmitals en inbox. Default 30."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.CredencialAconex,
                 "Id credencial Aconex",
-                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
                 ayuda: "Id en tabla Credenciales con Tipo = Aconex."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.CredencialBD,
                 "Id credencial BD",
-                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                ayuda: "Id en tabla Credenciales con Tipo = BD."),
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
+                ayuda: "Id en tabla Credenciales con Tipo = BD (estado de sync y mapeos)."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.CamposConsulta,
@@ -54,25 +82,25 @@ namespace SigmabotSync.Domain.Configuration
                 ayuda: "Columnas en BD alineadas por índice con CamposConsulta."),
 
             new TrabajoConfiguracionCampoDefinicion(
-                TrabajosConfiguracionKeyNames.Proyecto,
-                "Nombre proyecto (logs)",
-                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                tiposDondeObligatorio: Array.Empty<string>(),
-                ayuda: "Opcional; mejora logs y carpetas."),
-
-            new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.BasePath,
                 "Ruta base archivos",
-                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FileUploadWithMetadata },
-                ayuda: "UNC o carpeta local. FileExtraction descarga aquí; FileUploadWithMetadata busca archivos por NombreArchivo en metadata."),
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction },
+                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction },
+                ayuda: "UNC o carpeta local donde FileExtraction descarga los archivos."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.TablaMetadata,
                 "Tabla metadata (BD)",
                 tiposDondeVisible: new[] { TipoTrabajoIds.FileUploadWithMetadata },
                 tiposDondeObligatorio: new[] { TipoTrabajoIds.FileUploadWithMetadata },
-                ayuda: "Nombre de tabla con columna NombreArchivo (y filas a subir a Aconex). Solo FileUploadWithMetadata."),
+                ayuda: "Tabla de metadata en la credencial BD. Estándar: " + FileUploadWithMetadataDefaults.TablaMetadata + "."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.TablaPaths,
+                "Tabla rutas archivos (BD)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.FileUploadWithMetadata },
+                tiposDondeObligatorio: new[] { TipoTrabajoIds.FileUploadWithMetadata },
+                ayuda: "Tabla con PathFisico enlazada por DocumentoId. Estándar: " + FileUploadWithMetadataDefaults.TablaPaths + "."),
         };
 
         public static IReadOnlyList<TrabajoConfiguracionCampoDefinicion> ObtenerTodos()

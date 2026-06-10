@@ -3,24 +3,20 @@ using System;
 namespace SigmabotSync.Domain.Entities
 {
     /// <summary>
-    /// Registro de la tabla Trabajos. Contiene el estado y resultado de la última ejecución del trabajo.
+    /// Registro de la tabla Trabajos. Definición (Nombre, Tipo, Estado) y resumen de la última ejecución
+    /// (rellenado por la consola). La programación horaria está en TrabajosProgramacion.
     /// </summary>
     public class Trabajo
     {
         public int Id { get; set; }
         public string Nombre { get; set; }
         public string Tipo { get; set; }
-        /// <summary>Periodicidad del trabajo (nombre de columna en BD: Perioricidad).</summary>
-        public string Perioricidad { get; set; }
+        public string Estado { get; set; }
         /// <summary>Fecha y hora de la última ejecución (datetime).</summary>
         public DateTime? FechaUltimaEjecucion { get; set; }
-        /// <summary>Fecha y hora de la próxima ejecución programada (datetime).</summary>
-        public DateTime? FechaProximaEjecucion { get; set; }
         /// <summary>Resultado de la última ejecución: "Exitoso", "Error", etc.</summary>
         public string ResultadoUltimaEjecucion { get; set; }
-        public string ControldeEjecucion { get; set; }
-        public string Estado { get; set; }
-        /// <summary>Última corrección o mensaje de error de la ejecución.</summary>
+        /// <summary>Detalle del error de la última ejecución (null si fue exitosa).</summary>
         public string UltCorrEjecucion { get; set; }
     }
 }

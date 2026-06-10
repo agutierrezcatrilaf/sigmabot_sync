@@ -1,5 +1,6 @@
 using SigmabotSync.Application.Common;
 using SigmabotSync.Domain.Config;
+using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
 using SigmabotSync.Domain.Ports;
 using System;
@@ -16,8 +17,7 @@ using System.Xml;
 namespace SigmabotSync.Application.FileExtraction
 {
     /// <summary>
-    /// Worker para el tipo de trabajo FileUploadWithMetadata: lee la tabla de metadata desde la BD (CredencialBD),
-    /// enlaza archivos en BasePath por la columna <c>NombreArchivo</c> (ej. <c>DocumentoEjemplo.pdf</c>) y envía archivo + metadata a Aconex.
+    /// Worker para FileUploadWithMetadata (DataLake): <c>DocumentosMetadata</c> + <c>DocumentosPath</c> → Register Document en Aconex.
     /// </summary>
     public class FileUploadWithMetadataWorker
     {
@@ -27,8 +27,14 @@ namespace SigmabotSync.Application.FileExtraction
         /// </summary>
         private const bool RegisterDocumentUseAconexAutoNumber = true;
 
-        /// <summary>Valor por defecto del campo de proyecto <see cref="XmlNameTipoDeDocumentoSingleSelect"/> (más adelante: TrabajoConfiguracion).</summary>
+        /// <summary>Valor por defecto de <c>TipoDocumento</c> → <c>TipoDeDocumento_singleSelect</c> si la fila no trae dato.</summary>
         private const string DefaultTipoDeDocumentoSingleSelectValue = "Certificado";
+
+        /// <summary>Nombre en <c>Doctype</c>/<c>TiposDocumentos</c> para <c>DocumentTypeId</c> si la fila no trae <c>doctype</c>.</summary>
+        private const string DefaultDocumentTypeName = "Documento Interno";
+
+        /// <summary>Autor Aconex (<c>Author</c>) si la fila no trae <c>Author</c>/<c>CreadoPor</c>. Alineado con default SQL de DocumentosMetadata.</summary>
+        private const string DefaultAuthorName = "SALFAMontajes";
 
         private const string XmlNameTipoDeDocumentoSingleSelect = "TipoDeDocumento_singleSelect";
 
@@ -54,9 +60,28 @@ namespace SigmabotSync.Application.FileExtraction
             _aconexConfig = FileExtractionConfig.FromCredencial(credAconex, trabajoConfig.IdProyecto ?? "", null);
         }
 
-        /// <summary>
-        /// Ejecuta el proceso: lee metadata de la tabla, enlaza archivos por <c>NombreArchivo</c> en <c>BasePath</c> y envía a Aconex.
-        /// </summary>
+        /// <summary>Columnas de proyecto DataLake → elemento XML <c>*_singleSelect</c> en Register Document.</summary>
+        private static readonly (string ColumnaMetadata, string XmlSingleSelect)[] DataLakeProjectFieldMap =
+        {
+            ("CWA", "Cwa_singleSelect"),
+            ("CWP", "Cwp_singleSelect"),
+            ("EWP", "Ewp_singleSelect"),
+            ("PWP", "Pwp_singleSelect"),
+            ("CMA", "Cma_singleSelect"),
+            ("Discipline", "Discipline_singleSelect"),
+            ("TipoDocumento", "TipoDeDocumento_singleSelect"),
+            ("Proceso", "Proceso_singleSelect"),
+            ("EstatusBim", "EstatusBim_singleSelect"),
+        };
+
+        /// <summary>Columnas internas del JOIN DataLake que no deben mapearse a identificadores XML de Aconex.</summary>
+        private static readonly HashSet<string> InternalDataLakeColumnNames =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Id", "Procesado", "PathFisico", "HashArchivo", "Size", "Extension", "PathId",
+                "CreadoEn", "DocumentoId", "ACXProjectId", "NumeroTransmittal"
+            };
+
         public async Task RunAsync()
         {
             string connectionStringBd = _credBd.GetConnectionString();
@@ -65,38 +90,38 @@ namespace SigmabotSync.Application.FileExtraction
                 throw new InvalidOperationException("FileUploadWithMetadata requiere CredencialBD con Servidor y BaseDatos configurados.");
             }
 
-            string tablaMetadata = ( _trabajoConfig.TablaMetadata ?? "" ).Trim();
-            if (string.IsNullOrEmpty(tablaMetadata))
+            string tablaMetadata = FileUploadWithMetadataDefaults.ResolverTablaMetadata(_trabajoConfig.TablaMetadata);
+            string tablaPaths = FileUploadWithMetadataDefaults.ResolverTablaPaths(_trabajoConfig.TablaPaths);
+
+            if (!string.Equals(tablaMetadata, FileUploadWithMetadataDefaults.TablaMetadata, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(tablaPaths, FileUploadWithMetadataDefaults.TablaPaths, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("FileUploadWithMetadata requiere TablaMetadata en TrabajosConfiguracion.");
+                throw new InvalidOperationException(
+                    "FileUploadWithMetadata solo admite TablaMetadata="
+                    + FileUploadWithMetadataDefaults.TablaMetadata
+                    + " y TablaPaths="
+                    + FileUploadWithMetadataDefaults.TablaPaths + ".");
             }
 
-            string basePath = ( _trabajoConfig.BasePath ?? "" ).Trim();
-            if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
-            {
-                throw new InvalidOperationException("FileUploadWithMetadata requiere BasePath válido en TrabajosConfiguracion. Ruta: " + ( basePath ?? "" ));
-            }
-
-            OnStatus?.Invoke("Leyendo tabla de metadata...");
-            DataTable metadata = LeerTablaMetadata(connectionStringBd, tablaMetadata);
+            OnStatus?.Invoke($"Leyendo {tablaMetadata} + {tablaPaths}...");
+            DataTable metadata = LeerMetadataConPaths(connectionStringBd, tablaMetadata, tablaPaths);
             if (metadata == null || metadata.Rows.Count == 0)
             {
                 OnStatus?.Invoke("No hay registros en la tabla de metadata.");
                 return;
             }
 
-            string columnaNombreArchivo = ResolverColumnaNombreArchivo(metadata);
-            if (columnaNombreArchivo == null)
+            string columnaRutaArchivo = ResolverColumnaPathFisico(metadata);
+            if (columnaRutaArchivo == null)
             {
                 throw new InvalidOperationException(
-                    "La tabla de metadata debe tener una columna NombreArchivo (nombre del archivo en BasePath, ej. DocumentoEjemplo.pdf). Columnas encontradas: "
+                    "El JOIN metadata/paths debe incluir columna PathFisico. Columnas: "
                     + string.Join(", ", metadata.Columns.Cast<DataColumn>().Select(c => c.ColumnName)));
             }
 
             string columnaProcesado = ResolverColumnaProcesado(metadata);
             string columnaId = ResolverColumnaId(metadata);
-            var idsProcesadosExitosamente = new List<long>();
-            var nombresProcesadosExitosamente = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var idsProcesadosExitosamente = new List<string>();
 
             int total = metadata.Rows.Count;
             int procesados = 0;
@@ -117,29 +142,20 @@ namespace SigmabotSync.Application.FileExtraction
                 DataRow row = metadata.Rows[i];
                 if (FilaYaProcesada(row, metadata.Columns, columnaProcesado))
                 {
-                    object nom = row[columnaNombreArchivo];
-                    string nomArchivo = nom?.ToString()?.Trim() ?? "";
-                    Utilities.Wlog($"FileUploadWithMetadata: Fila {i + 1} ya procesada (Procesado=1), se omite. NombreArchivo={nomArchivo}", 1);
+                    string refArchivo = ObtenerReferenciaArchivoFila(row, metadata.Columns, columnaRutaArchivo);
+                    Utilities.Wlog($"FileUploadWithMetadata: Fila {i + 1} ya procesada (Procesado=1), se omite. Ref={refArchivo}", 1);
                     omitidosYaProcesados++;
                     procesados++;
                     OnProgress?.Invoke(procesados, total);
                     continue;
                 }
 
-                object nombreObj = row[columnaNombreArchivo];
-                string nombreArchivo = nombreObj?.ToString().Trim();
-                if (string.IsNullOrEmpty(nombreArchivo))
-                {
-                    Utilities.Wlog($"FileUploadWithMetadata: Fila {i + 1} sin NombreArchivo, se omite.", 1);
-                    procesados++;
-                    OnProgress?.Invoke(procesados, total);
-                    continue;
-                }
+                string filePath = ResolverRutaArchivoDesdePathFisico(row, metadata.Columns, columnaRutaArchivo);
+                string refNom = ObtenerReferenciaArchivoFila(row, metadata.Columns, columnaRutaArchivo);
 
-                string filePath = ResolverRutaArchivoPorNombreArchivo(basePath, nombreArchivo);
                 if (string.IsNullOrEmpty(filePath))
                 {
-                    string msgArchivo = $"Fila {i + 1}, NombreArchivo={nombreArchivo}: archivo no encontrado en BasePath.";
+                    string msgArchivo = $"Fila {i + 1}, ref={refNom}: archivo no encontrado.";
                     Utilities.Wlog($"FileUploadWithMetadata: {msgArchivo}", 1);
                     throw new InvalidOperationException(msgArchivo);
                 }
@@ -148,12 +164,12 @@ namespace SigmabotSync.Application.FileExtraction
                 {
                     await EnviarDocumentoAconexAsync(filePath, row, metadata.Columns, registerSchema, mapTipos, mapEstatus);
                     enviados++;
-                    AcumularFilaProcesadaParaUpdate(row, metadata.Columns, columnaId, columnaNombreArchivo, idsProcesadosExitosamente, nombresProcesadosExitosamente);
-                    OnStatus?.Invoke($"Enviado: {nombreArchivo}");
+                    AcumularFilaProcesadaParaUpdate(row, columnaId, idsProcesadosExitosamente);
+                    OnStatus?.Invoke($"Enviado: {Path.GetFileName(filePath)}");
                 }
                 catch (Exception ex)
                 {
-                    Utilities.Wlog($"FileUploadWithMetadata: Error enviando NombreArchivo={nombreArchivo}: {ex.Message}", 0);
+                    Utilities.Wlog($"FileUploadWithMetadata: Error enviando ref={refNom}: {ex.Message}", 0);
                     throw;
                 }
 
@@ -166,21 +182,21 @@ namespace SigmabotSync.Application.FileExtraction
                 tablaMetadata,
                 columnaProcesado,
                 columnaId,
-                idsProcesadosExitosamente,
-                columnaNombreArchivo,
-                nombresProcesadosExitosamente);
+                idsProcesadosExitosamente);
 
             OnStatus?.Invoke($"Completado: {enviados} enviado(s), {omitidosYaProcesados} omitido(s) ya procesado(s), {marcados} marcado(s) con Procesado=1.");
         }
 
-        /// <summary>
-        /// Lee la tabla de metadata desde la BD indicada por la credencial.
-        /// </summary>
-        private DataTable LeerTablaMetadata(string connectionString, string nombreTabla)
+        /// <summary>JOIN metadata + paths: una fila por archivo a subir.</summary>
+        private static DataTable LeerMetadataConPaths(string connectionString, string tablaMetadata, string tablaPaths)
         {
-            // Nombre de tabla con identificador entre corchetes para SQL Server
-            string tablaEscapada = "[" + nombreTabla.Replace("]", "]]") + "]";
-            string sql = "SELECT * FROM " + tablaEscapada;
+            string metaEsc = "[" + tablaMetadata.Replace("]", "]]") + "]";
+            string pathsEsc = "[" + tablaPaths.Replace("]", "]]") + "]";
+            string sql = $@"
+                SELECT m.*, p.[PathFisico], p.[HashArchivo], p.[Size], p.[Extension], p.[Id] AS [PathId]
+                FROM {metaEsc} m
+                INNER JOIN {pathsEsc} p ON p.[DocumentoId] = m.[Id]
+                ORDER BY m.[Id], p.[Id]";
 
             var dt = new DataTable();
             using (var cn = new SqlConnection(connectionString))
@@ -193,6 +209,48 @@ namespace SigmabotSync.Application.FileExtraction
                 }
             }
             return dt;
+        }
+
+        private static string ObtenerReferenciaArchivoFila(
+            DataRow row,
+            DataColumnCollection columnas,
+            string columnaPathFisico)
+        {
+            if (!string.IsNullOrWhiteSpace(columnaPathFisico))
+            {
+                object o = row[columnaPathFisico];
+                if (o != null && o != DBNull.Value)
+                {
+                    string s = o.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(s)) return s;
+                }
+            }
+            return GetValueFromRow(row, columnas, "PathFisico") ?? "";
+        }
+
+        private static string ResolverRutaArchivoDesdePathFisico(
+            DataRow row,
+            DataColumnCollection columnas,
+            string columnaPathFisico)
+        {
+            string pathFisico = row[columnaPathFisico]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(pathFisico))
+                pathFisico = GetValueFromRow(row, columnas, "PathFisico");
+            if (string.IsNullOrWhiteSpace(pathFisico))
+                return null;
+
+            pathFisico = pathFisico.Trim();
+            return File.Exists(pathFisico) ? pathFisico : null;
+        }
+
+        private static string ResolverColumnaPathFisico(DataTable metadata)
+        {
+            foreach (DataColumn c in metadata.Columns)
+            {
+                if (string.Equals(c.ColumnName, "PathFisico", StringComparison.OrdinalIgnoreCase))
+                    return c.ColumnName;
+            }
+            return null;
         }
 
         /// <summary>
@@ -209,32 +267,46 @@ namespace SigmabotSync.Application.FileExtraction
             using (var cn = new SqlConnection(connectionString))
             {
                 cn.Open();
-                using (var cmd = new SqlCommand("SELECT [Nombre], [idTipo] FROM [TiposDocumentos]", cn))
-                using (SqlDataReader r = cmd.ExecuteReader())
+                try
                 {
-                    while (r.Read())
+                    using (var cmd = new SqlCommand("SELECT [Nombre], [idTipo] FROM [TiposDocumentos]", cn))
+                    using (SqlDataReader r = cmd.ExecuteReader())
                     {
-                        string nombre = r[0] == DBNull.Value ? null : r[0].ToString()?.Trim();
-                        if (string.IsNullOrEmpty(nombre)) continue;
-                        string id = r[1] == DBNull.Value ? null : r[1].ToString()?.Trim();
-                        if (string.IsNullOrEmpty(id)) continue;
-                        if (!tipos.ContainsKey(nombre))
-                            tipos[nombre] = id;
+                        while (r.Read())
+                        {
+                            string nombre = r[0] == DBNull.Value ? null : r[0].ToString()?.Trim();
+                            if (string.IsNullOrEmpty(nombre)) continue;
+                            string id = r[1] == DBNull.Value ? null : r[1].ToString()?.Trim();
+                            if (string.IsNullOrEmpty(id)) continue;
+                            if (!tipos.ContainsKey(nombre))
+                                tipos[nombre] = id;
+                        }
                     }
                 }
-
-                using (var cmd = new SqlCommand("SELECT [Nombre], [idEstatus] FROM [EstatusDocumentos]", cn))
-                using (SqlDataReader r = cmd.ExecuteReader())
+                catch (SqlException ex)
                 {
-                    while (r.Read())
+                    Utilities.Wlog($"FileUploadWithMetadata: TiposDocumentos no disponible en BD ({ex.Message}); se usará solo schema Aconex.", 1);
+                }
+
+                try
+                {
+                    using (var cmd = new SqlCommand("SELECT [Nombre], [idEstatus] FROM [EstatusDocumentos]", cn))
+                    using (SqlDataReader r = cmd.ExecuteReader())
                     {
-                        string nombre = r[0] == DBNull.Value ? null : r[0].ToString()?.Trim();
-                        if (string.IsNullOrEmpty(nombre)) continue;
-                        string id = r[1] == DBNull.Value ? null : r[1].ToString()?.Trim();
-                        if (string.IsNullOrEmpty(id)) continue;
-                        if (!estatus.ContainsKey(nombre))
-                            estatus[nombre] = id;
+                        while (r.Read())
+                        {
+                            string nombre = r[0] == DBNull.Value ? null : r[0].ToString()?.Trim();
+                            if (string.IsNullOrEmpty(nombre)) continue;
+                            string id = r[1] == DBNull.Value ? null : r[1].ToString()?.Trim();
+                            if (string.IsNullOrEmpty(id)) continue;
+                            if (!estatus.ContainsKey(nombre))
+                                estatus[nombre] = id;
+                        }
                     }
+                }
+                catch (SqlException ex)
+                {
+                    Utilities.Wlog($"FileUploadWithMetadata: EstatusDocumentos no disponible en BD ({ex.Message}); se usará solo schema Aconex.", 1);
                 }
             }
 
@@ -261,19 +333,6 @@ namespace SigmabotSync.Application.FileExtraction
                 return null;
             string key = nombreEstatus.Trim();
             return idEstatusPorNombre.TryGetValue(key, out string id) ? id : null;
-        }
-
-        /// <summary>
-        /// Obtiene el nombre de la columna <c>NombreArchivo</c> (nombre del archivo en <c>BasePath</c>), case-insensitive.
-        /// </summary>
-        private static string ResolverColumnaNombreArchivo(DataTable metadata)
-        {
-            foreach (DataColumn c in metadata.Columns)
-            {
-                if (string.Equals(c.ColumnName, "NombreArchivo", StringComparison.OrdinalIgnoreCase))
-                    return c.ColumnName;
-            }
-            return null;
         }
 
         private static string ResolverColumnaProcesado(DataTable metadata)
@@ -322,26 +381,15 @@ namespace SigmabotSync.Application.FileExtraction
 
         private static void AcumularFilaProcesadaParaUpdate(
             DataRow row,
-            DataColumnCollection columnas,
             string columnaId,
-            string columnaNombreArchivo,
-            List<long> idsProcesadosExitosamente,
-            HashSet<string> nombresProcesadosExitosamente)
+            List<string> idsProcesadosExitosamente)
         {
-            if (!string.IsNullOrWhiteSpace(columnaId))
-            {
-                object oid = row[columnaId];
-                if (oid != null && oid != DBNull.Value && long.TryParse(oid.ToString(), out long idVal))
-                {
-                    idsProcesadosExitosamente.Add(idVal);
-                    return;
-                }
-            }
-
-            object on = row[columnaNombreArchivo];
-            string nombre = on?.ToString()?.Trim() ?? "";
-            if (!string.IsNullOrWhiteSpace(nombre))
-                nombresProcesadosExitosamente.Add(Path.GetFileName(nombre));
+            if (string.IsNullOrWhiteSpace(columnaId)) return;
+            object oid = row[columnaId];
+            if (oid == null || oid == DBNull.Value) return;
+            string idStr = oid.ToString()?.Trim();
+            if (!string.IsNullOrEmpty(idStr))
+                idsProcesadosExitosamente.Add(idStr);
         }
 
         private static int MarcarFilasComoProcesadas(
@@ -349,9 +397,7 @@ namespace SigmabotSync.Application.FileExtraction
             string nombreTabla,
             string columnaProcesado,
             string columnaId,
-            IReadOnlyList<long> idsProcesadosExitosamente,
-            string columnaNombreArchivo,
-            IReadOnlyCollection<string> nombresProcesadosExitosamente)
+            IReadOnlyList<string> idsProcesadosExitosamente)
         {
             if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(nombreTabla))
                 return 0;
@@ -361,84 +407,39 @@ namespace SigmabotSync.Application.FileExtraction
                 return 0;
             }
 
+            if (string.IsNullOrWhiteSpace(columnaId) || idsProcesadosExitosamente == null || idsProcesadosExitosamente.Count == 0)
+                return 0;
+
             string tablaEsc = "[" + nombreTabla.Replace("]", "]]") + "]";
             string colProcesadoEsc = "[" + columnaProcesado.Replace("]", "]]") + "]";
+            string colIdEsc = "[" + columnaId.Replace("]", "]]") + "]";
             int totalActualizados = 0;
 
             using (var cn = new SqlConnection(connectionString))
             {
                 cn.Open();
-
-                if (!string.IsNullOrWhiteSpace(columnaId) && idsProcesadosExitosamente != null && idsProcesadosExitosamente.Count > 0)
+                const int batchSize = 500;
+                for (int start = 0; start < idsProcesadosExitosamente.Count; start += batchSize)
                 {
-                    string colIdEsc = "[" + columnaId.Replace("]", "]]") + "]";
-                    const int batchSize = 500;
-                    for (int start = 0; start < idsProcesadosExitosamente.Count; start += batchSize)
+                    int count = Math.Min(batchSize, idsProcesadosExitosamente.Count - start);
+                    var paramNames = new List<string>(count);
+                    using (var cmd = new SqlCommand())
                     {
-                        int count = Math.Min(batchSize, idsProcesadosExitosamente.Count - start);
-                        var paramNames = new List<string>(count);
-                        using (var cmd = new SqlCommand())
+                        cmd.Connection = cn;
+                        for (int j = 0; j < count; j++)
                         {
-                            cmd.Connection = cn;
-                            for (int j = 0; j < count; j++)
-                            {
-                                string p = "@p" + j;
-                                paramNames.Add(p);
-                                cmd.Parameters.AddWithValue(p, idsProcesadosExitosamente[start + j]);
-                            }
-
-                            cmd.CommandText = "UPDATE " + tablaEsc + " SET " + colProcesadoEsc + " = 1 WHERE " + colIdEsc + " IN (" + string.Join(", ", paramNames) + ")";
-                            totalActualizados += cmd.ExecuteNonQuery();
+                            string p = "@p" + j;
+                            paramNames.Add(p);
+                            cmd.Parameters.AddWithValue(p, idsProcesadosExitosamente[start + j]);
                         }
-                    }
 
-                    return totalActualizados;
-                }
-
-                if (!string.IsNullOrWhiteSpace(columnaNombreArchivo) && nombresProcesadosExitosamente != null && nombresProcesadosExitosamente.Count > 0)
-                {
-                    string colNombreEsc = "[" + columnaNombreArchivo.Replace("]", "]]") + "]";
-                    int ix = 0;
-                    foreach (string nombre in nombresProcesadosExitosamente)
-                    {
-                        using (var cmd = new SqlCommand(
-                            "UPDATE " + tablaEsc + " SET " + colProcesadoEsc + " = 1 WHERE " + colNombreEsc + " = @nombre", cn))
-                        {
-                            cmd.Parameters.AddWithValue("@nombre", nombre);
-                            totalActualizados += cmd.ExecuteNonQuery();
-                        }
-                        ix++;
+                        cmd.CommandText = "UPDATE " + tablaEsc + " SET " + colProcesadoEsc + " = 1 WHERE " + colIdEsc + " IN (" + string.Join(", ", paramNames) + ")";
+                        totalActualizados += cmd.ExecuteNonQuery();
                     }
                 }
             }
 
             return totalActualizados;
-        }
-
-        /// <summary>
-        /// Busca en <paramref name="basePath"/> un archivo cuyo nombre coincida con <paramref name="nombreArchivo"/>
-        /// (ej. <c>DocumentoEjemplo.pdf</c>). Solo se usa el nombre de archivo (sin subcarpetas) por seguridad.
-        /// </summary>
-        private static string ResolverRutaArchivoPorNombreArchivo(string basePath, string nombreArchivo)
-        {
-            if (!Directory.Exists(basePath) || string.IsNullOrWhiteSpace(nombreArchivo))
-                return null;
-
-            string soloNombre = Path.GetFileName(nombreArchivo.Trim());
-            if (string.IsNullOrEmpty(soloNombre))
-                return null;
-
-            string pathExacto = Path.Combine(basePath, soloNombre);
-            if (File.Exists(pathExacto))
-                return pathExacto;
-
-            foreach (string f in Directory.GetFiles(basePath))
-            {
-                if (string.Equals(Path.GetFileName(f), soloNombre, StringComparison.OrdinalIgnoreCase))
-                    return f;
-            }
-
-            return null;
         }
 
         /// <summary>
@@ -563,20 +564,20 @@ namespace SigmabotSync.Application.FileExtraction
                 Utilities.Wlog($"FileUploadWithMetadata: Register Document falló. Status={raw.StatusCode}, Response={responseText}", 0);
                 if (ResponseIndicatesFieldValueAlreadyExists(responseText))
                 {
-                    string refArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
+                    string refArchivo = GetValueFromRow(metadataRow, columnas, "PathFisico") ?? Path.GetFileName(filePath) ?? "";
                     throw new InvalidOperationException(
                         "Aconex indica FIELD_VALUE_ALREADY_EXISTS (p. ej. documento o valor único ya existente). " +
                         "Register Document solo crea documentos nuevos. Opciones: excluir esa fila si ya se cargó, " +
                         "o usar en Aconex el flujo de nueva revisión / Supersede según su proceso. " +
-                        $"NombreArchivo={refArchivo}. Respuesta: {responseText}");
+                        $"PathFisico={refArchivo}. Respuesta: {responseText}");
                 }
 
-                throw new InvalidOperationException($"Aconex Register Document falló: {raw.StatusCode}. {responseText}");
+                throw new InvalidOperationException(FormatAconexRegisterFailureMessage(raw.StatusCode, responseText));
             }
 
             string documentId = ParseRegisterDocumentResponse(responseText);
-            string logArchivo = GetValueFromRow(metadataRow, columnas, "NombreArchivo") ?? Path.GetFileName(filePath) ?? "";
-            Utilities.Wlog($"FileUploadWithMetadata: Documento registrado. NombreArchivo={logArchivo}, DocumentId={documentId}", 1);
+            string logArchivo = GetValueFromRow(metadataRow, columnas, "PathFisico") ?? Path.GetFileName(filePath) ?? "";
+            Utilities.Wlog($"FileUploadWithMetadata: Documento registrado. PathFisico={logArchivo}, DocumentId={documentId}", 1);
             OnStatus?.Invoke($"Registrado en Aconex: {body.FileName} (Id={documentId})");
         }
 
@@ -590,7 +591,7 @@ namespace SigmabotSync.Application.FileExtraction
             IReadOnlyDictionary<string, IReadOnlyList<AconexSchemaValueOption>> picklists,
             IReadOnlyDictionary<string, string> idEstatusPorNombre)
         {
-            string raw = GetValueFromRow(row, columnas, "docstatus", "statusid", "DocumentStatusId");
+            string raw = GetValueFromRow(row, columnas, "docstatus", "statusid", "DocumentStatusId", "Status");
             if (string.IsNullOrWhiteSpace(raw))
                 throw new InvalidOperationException(
                     "El estado del documento es obligatorio para Register Document: indique docstatus, statusid o DocumentStatusId en la tabla de metadata.");
@@ -625,9 +626,9 @@ namespace SigmabotSync.Application.FileExtraction
             IReadOnlyDictionary<string, IReadOnlyList<AconexSchemaValueOption>> picklists,
             IReadOnlyDictionary<string, string> idTipoPorNombre)
         {
-            string docTypeNombre = GetValueFromRow(row, columnas, "doctype");
+            string docTypeNombre = GetValueFromRow(row, columnas, "doctype", "Doctype", "DocumentTypeId");
             if (string.IsNullOrWhiteSpace(docTypeNombre))
-                throw new InvalidOperationException("doctype es obligatorio para Register Document: debe indicar el nombre del tipo de documento (columna doctype en la tabla de metadata).");
+                docTypeNombre = DefaultDocumentTypeName;
 
             string trimmed = docTypeNombre.Trim();
 
@@ -648,6 +649,15 @@ namespace SigmabotSync.Application.FileExtraction
             }
 
             return fromSql;
+        }
+
+        /// <summary>
+        /// Resuelve <c>Author</c> desde la fila DataLake (<c>CreadoPor</c>) o el default SQL.
+        /// </summary>
+        private static string ResolveAuthorForAconex(DataRow row, DataColumnCollection columnas)
+        {
+            string author = GetValueFromRow(row, columnas, "Author", "author", "CreadoPor");
+            return string.IsNullOrWhiteSpace(author) ? DefaultAuthorName : author.Trim();
         }
 
         private static bool PicklistDefinesOptions(
@@ -716,10 +726,11 @@ namespace SigmabotSync.Application.FileExtraction
 
         /// <summary>
         /// Construye el XML <c>Document</c> según <paramref name="registerSchema"/> (GET register/schema).
-        /// Tipo y estado: <c>doctype</c> → <c>TiposDocumentos</c>; <c>docstatus</c>/<c>statusid</c>/<c>DocumentStatusId</c> → <c>EstatusDocumentos</c>.
+        /// Tipo Aconex: <c>Doctype</c>/<c>doctype</c> → <c>DocumentTypeId</c> vía <c>TiposDocumentos</c> (default Documento Interno).
+        /// Campo proyecto: <c>TipoDocumento</c> → <c>TipoDeDocumento_singleSelect</c> (default Certificado). <c>Status</c> → <c>DocumentStatusId</c>.
         /// El resto de identificadores se toman de columnas cuyo nombre coincide con el identificador o alias (p. ej. <c>Discipline</c>/<c>discipline</c>).
-        /// Con autonumeración (<see cref="RegisterDocumentUseAconexAutoNumber"/>), no se envía <c>DocumentNumber</c>; el archivo en disco se enlaza por la columna <c>NombreArchivo</c> (ver <see cref="RunAsync"/>).
-        /// Campos de proyecto con sufijo <c>_singleSelect</c> en la metadata se envían como elementos hijos directos de <c>Document</c> (p. ej. <c>&lt;Cma_singleSelect&gt;…&lt;/Cma_singleSelect&gt;</c>). Si <c>TipoDeDocumento_singleSelect</c> falta o viene vacío, se usa <see cref="DefaultTipoDeDocumentoSingleSelectValue"/>.
+        /// Con autonumeración (<see cref="RegisterDocumentUseAconexAutoNumber"/>), no se envía <c>DocumentNumber</c>; el archivo se toma de <c>PathFisico</c> en <c>DocumentosPath</c>.
+        /// Campos de proyecto <c>*_singleSelect</c> se envían solo si hay valor en la fila; <c>TipoDeDocumento_singleSelect</c> siempre (default Certificado).
         /// </summary>
         private string BuildAconexRegisterXml(
             DataRow row,
@@ -733,11 +744,11 @@ namespace SigmabotSync.Application.FileExtraction
                 throw new ArgumentException("registerSchema no puede estar vacío.", nameof(registerSchema));
 
             bool useAutoNumber = RegisterDocumentUseAconexAutoNumber;
-            string docNumber = GetValueFromRow(row, columnas, "docno", "DocumentNumber") ?? "";
+            string docNumber = GetValueFromRow(row, columnas, "docno", "DocumentNumber", "NumeroDocumento") ?? "";
             if (!useAutoNumber && string.IsNullOrWhiteSpace(docNumber))
                 throw new InvalidOperationException("docno/DocumentNumber es obligatorio en la tabla de metadata para Register Document (o active autonumeración en Aconex y en este worker).");
 
-            string title = GetValueFromRow(row, columnas, "title", "Title") ?? "";
+            string title = GetValueFromRow(row, columnas, "title", "Title", "Titulo") ?? "";
             if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(uploadFileName))
                 title = Path.GetFileNameWithoutExtension(uploadFileName);
             if (string.IsNullOrWhiteSpace(title))
@@ -746,7 +757,7 @@ namespace SigmabotSync.Application.FileExtraction
                     title = docNumber;
                 else
                 {
-                    string na = GetValueFromRow(row, columnas, "NombreArchivo");
+                    string na = GetValueFromRow(row, columnas, "Titulo", "PathFisico");
                     title = !string.IsNullOrWhiteSpace(na) ? Path.GetFileNameWithoutExtension(na) : "Documento";
                 }
             }
@@ -776,6 +787,10 @@ namespace SigmabotSync.Application.FileExtraction
                 string id = field.Identifier.Trim();
                 if (useAutoNumber && string.Equals(id, "DocumentNumber", StringComparison.OrdinalIgnoreCase))
                     continue;
+                if (!ShouldEmitRegisterSchemaIdentifier(id))
+                    continue;
+                if (ShouldSkipStandardRegisterIdentifierInFavorOfProjectSingleSelect(id))
+                    continue;
 
                 string mandatory = field.MandatoryStatus ?? "";
                 bool isMandatory = string.Equals(mandatory, "MANDATORY", StringComparison.OrdinalIgnoreCase);
@@ -800,13 +815,139 @@ namespace SigmabotSync.Application.FileExtraction
 
             AppendRegisterXmlFromExtraMetadataColumns(sb, row, columnas, emittedXmlIdentifiers, registerSchema, useAutoNumber);
 
-            AppendSingleSelectMetadataAsDocumentElements(sb, row, columnas);
+            AppendProjectSingleSelectFieldsFromRow(sb, row, columnas, registerSchema);
 
             if (!emittedHasFile)
                 sb.Append("<HasFile>true</HasFile>");
 
             sb.Append("</Document>");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Emite <c>*_singleSelect</c> solo con datos presentes en la fila (sin defaults), excepto
+        /// <see cref="XmlNameTipoDeDocumentoSingleSelect"/> que siempre se envía (default <see cref="DefaultTipoDeDocumentoSingleSelectValue"/>).
+        /// </summary>
+        private static void AppendProjectSingleSelectFieldsFromRow(
+            StringBuilder sb,
+            DataRow row,
+            DataColumnCollection columnas,
+            AconexRegisterSchemaSnapshot registerSchema)
+        {
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach ((string columnaMetadata, string xmlSingleSelect) in DataLakeProjectFieldMap)
+            {
+                if (string.Equals(xmlSingleSelect, XmlNameTipoDeDocumentoSingleSelect, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string value = ResolveProjectSingleSelectValue(row, columnas, xmlSingleSelect);
+                if (string.IsNullOrWhiteSpace(value)) continue;
+                if (!emitted.Add(xmlSingleSelect)) continue;
+                sb.Append("<").Append(xmlSingleSelect).Append(">")
+                    .Append(EscapeXml(value.Trim()))
+                    .Append("</").Append(xmlSingleSelect).Append(">");
+            }
+
+            foreach (DataColumn c in columnas)
+            {
+                string colName = c.ColumnName;
+                if (!IsProjectFieldSingleSelectColumn(colName)) continue;
+                if (string.Equals(colName, XmlNameTipoDeDocumentoSingleSelect, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!emitted.Add(colName)) continue;
+
+                string value = ResolveProjectSingleSelectValue(row, columnas, colName);
+                if (string.IsNullOrEmpty(value)) continue;
+
+                sb.Append("<").Append(colName).Append(">")
+                    .Append(EscapeXml(value))
+                    .Append("</").Append(colName).Append(">");
+            }
+
+            string tipoDeDocumento = ResolveProjectSingleSelectValue(row, columnas, XmlNameTipoDeDocumentoSingleSelect);
+            if (string.IsNullOrWhiteSpace(tipoDeDocumento))
+                tipoDeDocumento = DefaultTipoDeDocumentoSingleSelectValue;
+
+            sb.Append("<").Append(XmlNameTipoDeDocumentoSingleSelect).Append(">")
+                .Append(EscapeXml(tipoDeDocumento.Trim()))
+                .Append("</").Append(XmlNameTipoDeDocumentoSingleSelect).Append(">");
+
+            ValidateMandatoryProjectSingleSelectFields(row, columnas, registerSchema);
+        }
+
+        /// <summary>Obtiene el valor DataLake para un campo de proyecto <c>*_singleSelect</c> (p. ej. columna <c>PWP</c> → <c>Pwp_singleSelect</c>).</summary>
+        private static string ResolveProjectSingleSelectValue(
+            DataRow row,
+            DataColumnCollection columnas,
+            string xmlSingleSelect)
+        {
+            if (string.IsNullOrWhiteSpace(xmlSingleSelect)) return null;
+
+            string dataLakeColumn = TryGetDataLakeColumnForXmlSingleSelect(xmlSingleSelect);
+            if (!string.IsNullOrWhiteSpace(dataLakeColumn))
+            {
+                string fromMapped = GetValueFromRow(row, columnas, dataLakeColumn);
+                if (!string.IsNullOrWhiteSpace(fromMapped)) return fromMapped.Trim();
+            }
+
+            return GetValueFromRow(row, columnas, xmlSingleSelect);
+        }
+
+        private static string TryGetDataLakeColumnForXmlSingleSelect(string xmlSingleSelect)
+        {
+            if (string.IsNullOrWhiteSpace(xmlSingleSelect)) return null;
+            foreach ((string columnaMetadata, string xml) in DataLakeProjectFieldMap)
+            {
+                if (string.Equals(xml, xmlSingleSelect, StringComparison.OrdinalIgnoreCase))
+                    return columnaMetadata;
+            }
+            return null;
+        }
+
+        /// <summary>Sugiere columna en <c>DocumentosMetadata</c> para un identificador XML de proyecto.</summary>
+        private static string SuggestDataLakeColumnForXmlField(string xmlField)
+        {
+            string fromMap = TryGetDataLakeColumnForXmlSingleSelect(xmlField);
+            if (!string.IsNullOrWhiteSpace(fromMap)) return fromMap;
+
+            const string suffix = "_singleSelect";
+            if (!string.IsNullOrWhiteSpace(xmlField)
+                && xmlField.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                && xmlField.Length > suffix.Length)
+            {
+                string baseName = xmlField.Substring(0, xmlField.Length - suffix.Length);
+                if (baseName.Length == 1)
+                    return baseName.ToUpperInvariant();
+                return char.ToUpperInvariant(baseName[0]) + baseName.Substring(1);
+            }
+
+            return xmlField;
+        }
+
+        private static void ValidateMandatoryProjectSingleSelectFields(
+            DataRow row,
+            DataColumnCollection columnas,
+            AconexRegisterSchemaSnapshot registerSchema)
+        {
+            if (registerSchema?.Fields == null) return;
+
+            foreach (AconexRegisterSchemaField field in registerSchema.Fields)
+            {
+                if (field == null || string.IsNullOrWhiteSpace(field.Identifier)) continue;
+
+                string id = field.Identifier.Trim();
+                if (!IsProjectFieldSingleSelectColumn(id)) continue;
+                if (!string.Equals(field.MandatoryStatus, "MANDATORY", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(id, XmlNameTipoDeDocumentoSingleSelect, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string value = ResolveProjectSingleSelectValue(row, columnas, id);
+                if (!string.IsNullOrWhiteSpace(value)) continue;
+
+                string hint = SuggestDataLakeColumnForXmlField(id);
+                throw new InvalidOperationException(
+                    $"Campo obligatorio según schema de Aconex sin valor: {id}. Añada la columna '{hint}' en DocumentosMetadata con un valor válido del proyecto.");
+            }
         }
 
         /// <summary>
@@ -817,44 +958,7 @@ namespace SigmabotSync.Application.FileExtraction
             && columnName.EndsWith("_singleSelect", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Emite un elemento por cada columna <c>*_singleSelect</c> con valor como hijo directo de <c>Document</c>.
-        /// <c>TipoDeDocumento_singleSelect</c> vacío o ausente usa <see cref="DefaultTipoDeDocumentoSingleSelectValue"/>.
-        /// </summary>
-        private static void AppendSingleSelectMetadataAsDocumentElements(
-            StringBuilder sb,
-            DataRow row,
-            DataColumnCollection columnas)
-        {
-            bool wroteTipoDeDocumento = false;
-
-            foreach (DataColumn c in columnas)
-            {
-                string colName = c.ColumnName;
-                if (!IsProjectFieldSingleSelectColumn(colName)) continue;
-
-                object o = row[c];
-                string value = o == null || o == DBNull.Value ? "" : ( o.ToString()?.Trim() ?? "" );
-                if (string.IsNullOrEmpty(value)
-                    && string.Equals(colName, XmlNameTipoDeDocumentoSingleSelect, StringComparison.OrdinalIgnoreCase))
-                    value = DefaultTipoDeDocumentoSingleSelectValue;
-
-                if (string.IsNullOrEmpty(value)) continue;
-
-                sb.Append("<").Append(colName).Append(">").Append(EscapeXml(value)).Append("</").Append(colName).Append(">");
-                if (string.Equals(colName, XmlNameTipoDeDocumentoSingleSelect, StringComparison.OrdinalIgnoreCase))
-                    wroteTipoDeDocumento = true;
-            }
-
-            if (!wroteTipoDeDocumento)
-            {
-                sb.Append("<").Append(XmlNameTipoDeDocumentoSingleSelect).Append(">")
-                    .Append(EscapeXml(DefaultTipoDeDocumentoSingleSelectValue))
-                    .Append("</").Append(XmlNameTipoDeDocumentoSingleSelect).Append(">");
-            }
-        }
-
-        /// <summary>
-        /// Register Document usa identificadores del schema del proyecto; los campos <c>*_singleSelect</c> se emiten aparte como hijos directos de <c>Document</c> (ver <see cref="AppendSingleSelectMetadataAsDocumentElements"/>). El prefijo <c>RegisterXml_</c> sigue limitado a identificadores conocidos de la guía.
+        /// Register Document usa identificadores del schema del proyecto; los campos <c>*_singleSelect</c> se emiten aparte (ver <see cref="AppendProjectSingleSelectFieldsFromRow"/>). El prefijo <c>RegisterXml_</c> sigue limitado a identificadores conocidos de la guía.
         /// 1) Columnas <c>RegisterXml_ProjectField1</c> (prefijo <c>RegisterXml_</c> + identificador permitido): emiten <c>&lt;ProjectField1&gt;…&lt;/ProjectField1&gt;</c>.
         /// 2) Identificadores conocidos aún no emitidos: se rellenan por alias (p. ej. columna <c>ProjectField1</c>).
         /// Revise en GET <c>register/schema</c> qué <c>FieldName</c> corresponde a cada <c>ProjectField1</c>…<c>3</c> en su proyecto.
@@ -875,6 +979,7 @@ namespace SigmabotSync.Application.FileExtraction
                 if (!IsKnownRegisterDocumentIdentifier(xmlId)) continue;
                 if (useAutoNumber && string.Equals(xmlId, "DocumentNumber", StringComparison.OrdinalIgnoreCase)) continue;
                 if (emittedXmlIdentifiers.Contains(xmlId)) continue;
+                if (ShouldSkipStandardRegisterIdentifierInFavorOfProjectSingleSelect(xmlId)) continue;
 
                 object o = row[c];
                 if (o == null || o == DBNull.Value) continue;
@@ -893,6 +998,7 @@ namespace SigmabotSync.Application.FileExtraction
                 if (useAutoNumber && string.Equals(id, "DocumentNumber", StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.Equals(id, "HasFile", StringComparison.OrdinalIgnoreCase)) continue;
                 if (IsSpecialCasedRegisterResolveIdentifier(id)) continue;
+                if (ShouldSkipStandardRegisterIdentifierInFavorOfProjectSingleSelect(id)) continue;
 
                 string dt = GetDataTypeForRegisterIdentifier(id, registerSchema);
                 string value = GetGenericRegisterFieldValue(row, columnas, id, dt);
@@ -922,6 +1028,47 @@ namespace SigmabotSync.Application.FileExtraction
         private static bool IsKnownRegisterDocumentIdentifier(string id) =>
             !string.IsNullOrWhiteSpace(id) && KnownRegisterDocumentIdentifierSet.Contains(id);
 
+        private static bool IsAconexProjectFieldColumn(string columnName)
+        {
+            if (string.IsNullOrWhiteSpace(columnName)) return false;
+            return columnName.EndsWith("_singleSelect", StringComparison.OrdinalIgnoreCase)
+                || columnName.EndsWith("_multiLineText", StringComparison.OrdinalIgnoreCase)
+                || columnName.EndsWith("_singleLineText", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Solo emite campos del GET register/schema que son identificadores válidos de Register Document
+        /// o campos de proyecto Aconex (<c>*_singleSelect</c>, etc.). Evita colisiones con columnas internas (p. ej. <c>Id</c>).
+        /// </summary>
+        private static bool ShouldEmitRegisterSchemaIdentifier(string identifier)
+        {
+            if (string.IsNullOrWhiteSpace(identifier)) return false;
+            if (string.Equals(identifier, "id", StringComparison.OrdinalIgnoreCase)) return false;
+            if (IsKnownRegisterDocumentIdentifier(identifier)) return true;
+            return IsAconexProjectFieldColumn(identifier);
+        }
+
+        private static bool IsInternalDataLakeColumn(string columnName) =>
+            !string.IsNullOrWhiteSpace(columnName) && InternalDataLakeColumnNames.Contains(columnName);
+
+        /// <summary>
+        /// Si una columna DataLake alimenta <c>Discipline_singleSelect</c>, no emitir también el identificador estándar inactivo <c>Discipline</c>.
+        /// </summary>
+        private static bool ShouldSkipStandardRegisterIdentifierInFavorOfProjectSingleSelect(string identifier)
+        {
+            if (string.IsNullOrWhiteSpace(identifier) || IsProjectFieldSingleSelectColumn(identifier))
+                return false;
+
+            string projectXml = identifier.Trim() + "_singleSelect";
+            foreach ((string _, string xml) in DataLakeProjectFieldMap)
+            {
+                if (string.Equals(xml, projectXml, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
         /// <summary>Identificadores resueltos en <see cref="ResolveRegisterFieldValueForSchema"/>; no rellenar con <see cref="GetGenericRegisterFieldValue"/> en la pasada extra.</summary>
         private static bool IsSpecialCasedRegisterResolveIdentifier(string id)
         {
@@ -932,6 +1079,7 @@ namespace SigmabotSync.Application.FileExtraction
                 case "Revision":
                 case "DocumentTypeId":
                 case "DocumentStatusId":
+                case "Author":
                 case "HasFile":
                     return true;
                 default:
@@ -1013,6 +1161,8 @@ namespace SigmabotSync.Application.FileExtraction
                     return docTypeId;
                 case "DocumentStatusId":
                     return docStatusId;
+                case "Author":
+                    return ResolveAuthorForAconex(row, columnas);
                 case "HasFile":
                     return "true";
                 default:
@@ -1022,16 +1172,28 @@ namespace SigmabotSync.Application.FileExtraction
 
         private static string GetGenericRegisterFieldValue(DataRow row, DataColumnCollection columnas, string identifier, string dataType)
         {
+            if (ShouldSkipStandardRegisterIdentifierInFavorOfProjectSingleSelect(identifier))
+                return null;
+
             foreach (string alias in GetColumnAliasesForIdentifier(identifier))
             {
+                if (IsInternalDataLakeColumn(alias)) continue;
                 foreach (DataColumn c in columnas)
                 {
                     if (!string.Equals(c.ColumnName, alias, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (IsInternalDataLakeColumn(c.ColumnName)) continue;
                     object o = row[c];
                     if (o == null || o == DBNull.Value) break;
                     return FormatRegisterValue(o, dataType, identifier);
                 }
             }
+
+            if (string.Equals(identifier, "Author", StringComparison.OrdinalIgnoreCase))
+                return ResolveAuthorForAconex(row, columnas);
+
+            if (IsProjectFieldSingleSelectColumn(identifier))
+                return ResolveProjectSingleSelectValue(row, columnas, identifier);
+
             return null;
         }
 
@@ -1089,17 +1251,17 @@ namespace SigmabotSync.Application.FileExtraction
             switch (identifier)
             {
                 case "DocumentNumber":
-                    return new[] { "docno", "DocumentNumber" };
+                    return new[] { "docno", "DocumentNumber", "NumeroDocumento" };
                 case "Title":
-                    return new[] { "title", "Title" };
+                    return new[] { "title", "Title", "Titulo" };
                 case "DocumentTypeId":
-                    return new[] { "doctype", "DocumentTypeId" };
+                    return new[] { "doctype", "Doctype", "DocumentTypeId" };
                 case "DocumentStatusId":
-                    return new[] { "docstatus", "statusid", "DocumentStatusId" };
+                    return new[] { "docstatus", "statusid", "DocumentStatusId", "Status" };
                 case "Revision":
                     return new[] { "revision", "Revision" };
                 case "RevisionDate":
-                    return new[] { "RevisionDate", "revisionDate", "revisiondate" };
+                    return new[] { "RevisionDate", "revisionDate", "revisiondate", "FechaRevision" };
                 case "PackageNumber":
                     return new[] { "PackageNumber", "packagenumber" };
                 case "ContractNumber":
@@ -1113,7 +1275,7 @@ namespace SigmabotSync.Application.FileExtraction
                 case "Discipline":
                     return new[] { "Discipline", "discipline" };
                 case "Author":
-                    return new[] { "Author", "author" };
+                    return new[] { "Author", "author", "CreadoPor" };
                 case "AuthorisedBy":
                     return new[] { "AuthorisedBy", "authorisedBy" };
                 case "Comments":
@@ -1149,6 +1311,21 @@ namespace SigmabotSync.Application.FileExtraction
                 case "ReviewStatusId":
                     return new[] { "ReviewStatusId", "reviewstatus", "reviewStatus" };
                 default:
+                    if (IsProjectFieldSingleSelectColumn(identifier))
+                    {
+                        var aliases = new List<string>
+                        {
+                            identifier,
+                            identifier.Length > 1
+                                ? char.ToLowerInvariant(identifier[0]) + identifier.Substring(1)
+                                : identifier.ToLowerInvariant()
+                        };
+                        string dataLakeColumn = TryGetDataLakeColumnForXmlSingleSelect(identifier);
+                        if (!string.IsNullOrWhiteSpace(dataLakeColumn))
+                            aliases.Add(dataLakeColumn);
+                        return aliases.ToArray();
+                    }
+
                     return new[]
                     {
                         identifier,
@@ -1273,6 +1450,36 @@ namespace SigmabotSync.Application.FileExtraction
         {
             if (string.IsNullOrWhiteSpace(responseText)) return false;
             return responseText.IndexOf("FIELD_VALUE_ALREADY_EXISTS", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string FormatAconexRegisterFailureMessage(int statusCode, string responseText)
+        {
+            if (TryParseMissingMandatoryField(responseText, out string xmlField))
+            {
+                string hint = SuggestDataLakeColumnForXmlField(xmlField);
+                return
+                    $"Aconex Register Document falló: {statusCode}. Campo obligatorio sin valor: {xmlField}. " +
+                    $"Añada la columna '{hint}' en DocumentosMetadata con un valor válido del proyecto. Respuesta: {responseText}";
+            }
+
+            return $"Aconex Register Document falló: {statusCode}. {responseText}";
+        }
+
+        private static bool TryParseMissingMandatoryField(string responseText, out string xmlField)
+        {
+            xmlField = null;
+            if (string.IsNullOrWhiteSpace(responseText)) return false;
+
+            const string marker = "Mandatory field ";
+            int idx = responseText.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return false;
+
+            int start = idx + marker.Length;
+            int end = responseText.IndexOf('<', start);
+            if (end < 0) end = responseText.Length;
+
+            xmlField = responseText.Substring(start, end - start).Trim();
+            return !string.IsNullOrWhiteSpace(xmlField);
         }
 
         /// <summary>
@@ -1518,7 +1725,7 @@ namespace SigmabotSync.Application.FileExtraction
         private static string GetChildText(XmlNode parent, string localName)
         {
             if (parent == null) return null;
-            XmlNode n = parent.SelectSingleNode(".//*[local-name()='" + localName + "']");
+            XmlNode n = parent.SelectSingleNode("./*[local-name()='" + localName + "']");
             if (n == null || string.IsNullOrWhiteSpace(n.InnerText))
                 return null;
             return n.InnerText.Trim();

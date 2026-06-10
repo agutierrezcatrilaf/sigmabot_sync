@@ -24,19 +24,17 @@ namespace SigmabotSync.Infrastructure.Services
         /// </summary>
         /// <param name="idTrabajo">Id del trabajo (coincide con la columna id en Trabajos).</param>
         /// <param name="exito">True si la ejecución fue exitosa, false si falló.</param>
-        /// <param name="mensajeError">Mensaje de error o detalle cuando exito es false (se guarda en UltCorrEjecucion).</param>
+        /// <param name="mensajeError">Ignorado aquí; el detalle se guarda en <c>TrabajosEjecucion</c>.</param>
         public void ActualizarResultadoEjecucion(int idTrabajo, bool exito, string mensajeError = null)
         {
             var fechaHoraUltimaEjecucion = DateTime.Now;
             var resultado = exito ? "Exitoso" : "Error";
-            var ultCorr = exito ? (string)null : (mensajeError ?? "Error en la ejecución");
 
             const string sql = @"
                 UPDATE [Trabajos]
                 SET
                     FechaUltimaEjecucion = @FechaUltimaEjecucion,
-                    ResultadoUltimaEjecucion = @ResultadoUltimaEjecucion,
-                    UltCorrEjecucion = @UltCorrEjecucion
+                    ResultadoUltimaEjecucion = @ResultadoUltimaEjecucion
                 WHERE id = @Id";
 
             using (var cn = new SqlConnection(_connectionString))
@@ -47,7 +45,6 @@ namespace SigmabotSync.Infrastructure.Services
                     cmd.Parameters.AddWithValue("@Id", idTrabajo);
                     cmd.Parameters.AddWithValue("@FechaUltimaEjecucion", fechaHoraUltimaEjecucion);
                     cmd.Parameters.AddWithValue("@ResultadoUltimaEjecucion", resultado);
-                    cmd.Parameters.AddWithValue("@UltCorrEjecucion", (object)ultCorr ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
             }
@@ -97,6 +94,16 @@ namespace SigmabotSync.Infrastructure.Services
                                 case "IdProyecto":
                                     result.IdProyecto = valor;
                                     break;
+                                case "IdProyecto2":
+                                    result.IdProyecto2 = valor;
+                                    break;
+                                case "Proyecto2":
+                                    result.Proyecto2 = valor;
+                                    break;
+                                case "DiasLookbackTransmittal":
+                                    if (int.TryParse(valor, out int diasLookback) && diasLookback > 0)
+                                        result.DiasLookbackTransmittal = diasLookback;
+                                    break;
                                 case "CamposConsulta":
                                     result.CamposConsulta = valor;
                                     break;
@@ -111,6 +118,9 @@ namespace SigmabotSync.Infrastructure.Services
                                     break;
                                 case "TablaMetadata":
                                     result.TablaMetadata = valor;
+                                    break;
+                                case "TablaPaths":
+                                    result.TablaPaths = valor;
                                     break;
                                 case "CredencialAconex":
                                     if (int.TryParse(valor, out int idAconex))

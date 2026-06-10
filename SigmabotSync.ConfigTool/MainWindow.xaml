@@ -102,7 +102,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#4B5563" Margin="0,0,0,8"
-                               Text="Nombre, Tipo y Estado son editables. Periodicidad y control de ejecución también (el motor o el programador externo pueden usarlos). Fechas y resultados suelen rellenarlos el consola al ejecutar."/>
+                               Text="Edite Nombre, Tipo y Estado. La programación horaria está en Programación. Última ejecución, resultado y error los actualiza la consola."/>
                     <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,10">
                         <Button Content="Cargar" Command="{Binding CargarTrabajosCommand}"/>
                         <Button Content="Nuevo trabajo" Command="{Binding NuevoTrabajoCommand}"/>
@@ -136,13 +136,6 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellEditingTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Periodicidad" Binding="{Binding Perioricidad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
-                            <DataGridTextColumn Header="Última ejecución" IsReadOnly="True" Width="150"
-                                                Binding="{Binding FechaUltimaEjecucion, StringFormat='{}{0:yyyy-MM-dd HH:mm}', TargetNullValue=-}"/>
-                            <DataGridTextColumn Header="Próxima ejecución" IsReadOnly="True" Width="150"
-                                                Binding="{Binding FechaProximaEjecucion, StringFormat='{}{0:yyyy-MM-dd HH:mm}', TargetNullValue=-}"/>
-                            <DataGridTextColumn Header="Resultado última" Binding="{Binding ResultadoUltimaEjecucion}" IsReadOnly="True" Width="100"/>
-                            <DataGridTextColumn Header="Control ejecución" Binding="{Binding ControldeEjecucion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                             <DataGridTemplateColumn Header="Estado" Width="130">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -157,7 +150,10 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellEditingTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Últ. corrección" Binding="{Binding UltCorrEjecucion}" IsReadOnly="True" Width="200"/>
+                            <DataGridTextColumn Header="Última ejecución" IsReadOnly="True" Width="150"
+                                                Binding="{Binding FechaUltimaEjecucion, StringFormat='{}{0:yyyy-MM-dd HH:mm}', TargetNullValue=-}"/>
+                            <DataGridTextColumn Header="Resultado última" Binding="{Binding ResultadoUltimaEjecucion}" IsReadOnly="True" Width="100"/>
+                            <DataGridTextColumn Header="Últ. error" Binding="{Binding UltCorrEjecucion}" IsReadOnly="True" Width="200"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

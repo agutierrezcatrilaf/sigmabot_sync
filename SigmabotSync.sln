@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigmabotSync.ConfigTool", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigmabotSync.ConfigWeb", "SigmabotSync.ConfigWeb\SigmabotSync.ConfigWeb.csproj", "{6989C3C0-7CAA-4E3D-B5CD-8966387B9DF8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigmabotConfig.Api", "SigmabotConfig.Api\SigmabotConfig.Api.csproj", "{14D85A51-4C27-404B-9897-19358FCC2CE4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,18 @@ Global
 		{6989C3C0-7CAA-4E3D-B5CD-8966387B9DF8}.Release|x64.Build.0 = Release|Any CPU
 		{6989C3C0-7CAA-4E3D-B5CD-8966387B9DF8}.Release|x86.ActiveCfg = Release|Any CPU
 		{6989C3C0-7CAA-4E3D-B5CD-8966387B9DF8}.Release|x86.Build.0 = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|x64.Build.0 = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Debug|x86.Build.0 = Debug|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|x64.ActiveCfg = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|x64.Build.0 = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|x86.ActiveCfg = Release|Any CPU
+		{14D85A51-4C27-404B-9897-19358FCC2CE4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

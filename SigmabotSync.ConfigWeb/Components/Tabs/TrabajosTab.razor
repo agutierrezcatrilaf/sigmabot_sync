@@ -1,7 +1,8 @@
 @inherits ConfiguratorComponentBase
 
 <MudText Typo="Typo.body2" Class="mb-3">
-    Nombre, Tipo y Estado son editables. Periodicidad y control de ejecución también.
+    Edite Nombre, Tipo y Estado. La programación horaria está en la pestaña Programación.
+    Última ejecución, resultado y detalle de error los actualiza la consola al ejecutar.
 </MudText>
 <MudStack Row="true" Class="mb-3" Spacing="2" Wrap="Wrap.Wrap">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="State.CargarTrabajos">Cargar</MudButton>
@@ -14,19 +15,16 @@
 <div class="config-grid-scroll">
     <MudTable Items="@State.Trabajos" Hover="true" Dense="true" Breakpoint="Breakpoint.None"
               Elevation="0" HorizontalScrollbar="false" Square="true"
-              Class="config-edit-table" Style="min-width: 1280px;"
+              Class="config-edit-table" Style="min-width: 960px;"
               @bind-SelectedItem="State.TrabajoSeleccionado">
         <HeaderContent>
             <MudTh Class="col-id">Id</MudTh>
             <MudTh Class="col-trab-nombre">Nombre</MudTh>
             <MudTh Class="col-trab-tipo">Tipo</MudTh>
-            <MudTh Class="col-trab-per">Periodicidad</MudTh>
-            <MudTh Class="col-trab-fecha">Última ejecución</MudTh>
-            <MudTh Class="col-trab-fecha">Próxima ejecución</MudTh>
-            <MudTh Class="col-trab-res">Resultado última</MudTh>
-            <MudTh Class="col-trab-ctrl">Control ejecución</MudTh>
             <MudTh Class="col-trab-estado">Estado</MudTh>
-            <MudTh Class="col-trab-corr">Últ. corrección</MudTh>
+            <MudTh Class="col-trab-fecha">Última ejecución</MudTh>
+            <MudTh Class="col-trab-res">Resultado última</MudTh>
+            <MudTh Class="col-trab-corr">Últ. error</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd Class="col-id">@context.Id</MudTd>
@@ -41,15 +39,6 @@
                     }
                 </MudSelect>
             </MudTd>
-            <MudTd Class="col-trab-per">
-                <MudTextField @bind-Value="context.Perioricidad" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
-            </MudTd>
-            <MudTd Class="col-trab-fecha">@(context.FechaUltimaEjecucion?.ToString("yyyy-MM-dd HH:mm") ?? "—")</MudTd>
-            <MudTd Class="col-trab-fecha">@(context.FechaProximaEjecucion?.ToString("yyyy-MM-dd HH:mm") ?? "—")</MudTd>
-            <MudTd Class="col-trab-res">@context.ResultadoUltimaEjecucion</MudTd>
-            <MudTd Class="col-trab-ctrl">
-                <MudTextField @bind-Value="context.ControldeEjecucion" Margin="Margin.Dense" Variant="Variant.Text" FullWidth="true" />
-            </MudTd>
             <MudTd Class="col-trab-estado">
                 <MudSelect T="string" @bind-Value="context.Estado" Margin="Margin.Dense" Dense="true" Variant="Variant.Text" FullWidth="true">
                     @foreach (var e in State.EstadosTrabajoParaEditor)
@@ -58,6 +47,8 @@
                     }
                 </MudSelect>
             </MudTd>
+            <MudTd Class="col-trab-fecha">@(context.FechaUltimaEjecucion?.ToString("yyyy-MM-dd HH:mm") ?? "—")</MudTd>
+            <MudTd Class="col-trab-res">@context.ResultadoUltimaEjecucion</MudTd>
             <MudTd Class="col-trab-corr">@context.UltCorrEjecucion</MudTd>
         </RowTemplate>
     </MudTable>

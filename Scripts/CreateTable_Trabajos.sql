@@ -1,6 +1,6 @@
--- Tabla Trabajos: estado y resultado de ejecución de cada trabajo.
--- id es IDENTITY; el registro debe existir (id 1 = primer trabajo, etc.).
--- Se actualiza al final de cada ejecución (ResultadoUltimaEjecucion, FechaUltimaEjecucion, etc.).
+-- Tabla Trabajos: definición del trabajo y resumen de la última ejecución.
+-- Programación: tabla TrabajosProgramacion (día/hora).
+-- Historial: tabla TrabajosEjecucion.
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Trabajos')
 BEGIN
@@ -8,12 +8,9 @@ BEGIN
         id                      INT             IDENTITY(1,1) NOT NULL PRIMARY KEY,
         Nombre                  NVARCHAR(200)   NULL,
         Tipo                    NVARCHAR(100)   NULL,
-        Perioricidad            NVARCHAR(100)   NULL,
+        Estado                  NVARCHAR(50)    NULL,
         FechaUltimaEjecucion    DATETIME        NULL,
-        FechaProximaEjecucion   DATETIME        NULL,
         ResultadoUltimaEjecucion NVARCHAR(50)   NULL,
-        ControldeEjecucion      NVARCHAR(200)   NULL,
-        Estado                  NVARCHAR(50)   NULL,
         UltCorrEjecucion        NVARCHAR(MAX)   NULL
     );
 
@@ -24,8 +21,8 @@ END
 ELSE
     PRINT 'La tabla Trabajos ya existe.';
 
--- Ejemplo: insertar trabajo (id se asigna por IDENTITY; id=1 para el primer trabajo)
+-- Ejemplo: insertar trabajo (id se asigna por IDENTITY)
 /*
-INSERT INTO [dbo].[Trabajos] (Nombre, Tipo, Perioricidad, Estado)
-VALUES ('Extracción documentos Aconex', 'ExtraccionArchivos', 'Diaria', 'Pendiente');
+INSERT INTO [dbo].[Trabajos] (Nombre, Tipo, Estado)
+VALUES ('Extracción documentos Aconex', 'FileExtraction', 'Activo');
 */

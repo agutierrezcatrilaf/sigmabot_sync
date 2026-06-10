@@ -9,6 +9,7 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
 {
     /// <summary>
     /// Alta, baja y modificación de la tabla Trabajos (herramienta de configuración).
+    /// Solo persiste Nombre, Tipo y Estado; el resumen de ejecución lo actualiza la consola.
     /// </summary>
     public class TrabajosEditorService
     {
@@ -22,9 +23,8 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
         public IReadOnlyList<Trabajo> ListarTodos()
         {
             const string sql = @"
-                SELECT id AS Id, Nombre, Tipo, Perioricidad,
-                    FechaUltimaEjecucion, FechaProximaEjecucion, ResultadoUltimaEjecucion,
-                    ControldeEjecucion, Estado, UltCorrEjecucion
+                SELECT id AS Id, Nombre, Tipo, Estado,
+                    FechaUltimaEjecucion, ResultadoUltimaEjecucion, UltCorrEjecucion
                 FROM Trabajos
                 ORDER BY id";
 
@@ -49,22 +49,16 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
         public int Insertar(Trabajo t)
         {
             const string sql = @"
-                INSERT INTO Trabajos (
-                    Nombre, Tipo, Perioricidad,
-                    FechaUltimaEjecucion, FechaProximaEjecucion, ResultadoUltimaEjecucion,
-                    ControldeEjecucion, Estado, UltCorrEjecucion)
+                INSERT INTO Trabajos (Nombre, Tipo, Estado)
                 OUTPUT INSERTED.id
-                VALUES (
-                    @Nombre, @Tipo, @Perioricidad,
-                    @FechaUltimaEjecucion, @FechaProximaEjecucion, @ResultadoUltimaEjecucion,
-                    @ControldeEjecucion, @Estado, @UltCorrEjecucion)";
+                VALUES (@Nombre, @Tipo, @Estado)";
 
             using (var cn = new SqlConnection(_connectionString))
             {
                 cn.Open();
                 using (var cmd = new SqlCommand(sql, cn))
                 {
-                    AddInsertParameters(cmd, t);
+                    AddEditableParameters(cmd, t);
                     return Convert.ToInt32(cmd.ExecuteScalar());
                 }
             }
@@ -79,13 +73,7 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
                 UPDATE Trabajos SET
                     Nombre = @Nombre,
                     Tipo = @Tipo,
-                    Perioricidad = @Perioricidad,
-                    FechaUltimaEjecucion = @FechaUltimaEjecucion,
-                    FechaProximaEjecucion = @FechaProximaEjecucion,
-                    ResultadoUltimaEjecucion = @ResultadoUltimaEjecucion,
-                    ControldeEjecucion = @ControldeEjecucion,
-                    Estado = @Estado,
-                    UltCorrEjecucion = @UltCorrEjecucion
+                    Estado = @Estado
                 WHERE id = @Id";
 
             using (var cn = new SqlConnection(_connectionString))
@@ -94,29 +82,18 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
                 using (var cmd = new SqlCommand(sql, cn))
                 {
                     cmd.Parameters.AddWithValue("@Id", t.Id);
-                    AddUpdateBodyParameters(cmd, t);
+                    AddEditableParameters(cmd, t);
                     if (cmd.ExecuteNonQuery() == 0)
                         throw new InvalidOperationException("No existe Trabajo id=" + t.Id);
                 }
             }
         }
 
-        private static void AddInsertParameters(SqlCommand cmd, Trabajo t)
+        private static void AddEditableParameters(SqlCommand cmd, Trabajo t)
         {
             cmd.Parameters.AddWithValue("@Nombre", (object)t.Nombre ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Tipo", (object)t.Tipo ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@Perioricidad", (object)t.Perioricidad ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@FechaUltimaEjecucion", (object)t.FechaUltimaEjecucion ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@FechaProximaEjecucion", (object)t.FechaProximaEjecucion ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@ResultadoUltimaEjecucion", (object)t.ResultadoUltimaEjecucion ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@ControldeEjecucion", (object)t.ControldeEjecucion ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Estado", (object)t.Estado ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@UltCorrEjecucion", (object)t.UltCorrEjecucion ?? DBNull.Value);
-        }
-
-        private static void AddUpdateBodyParameters(SqlCommand cmd, Trabajo t)
-        {
-            AddInsertParameters(cmd, t);
         }
 
         /// <summary>Elimina un trabajo por id. Puede fallar si existen filas en TrabajosProgramacion u otras FK.</summary>

@@ -8,6 +8,9 @@ namespace SigmabotSync.Domain.Configuration
     {
         public const string Proyecto = "Proyecto";
         public const string IdProyecto = "IdProyecto";
+        public const string IdProyecto2 = "IdProyecto2";
+        public const string Proyecto2 = "Proyecto2";
+        public const string DiasLookbackTransmittal = "DiasLookbackTransmittal";
         public const string CredencialAconex = "CredencialAconex";
         public const string CredencialBD = "CredencialBD";
         public const string CamposConsulta = "CamposConsulta";
@@ -15,5 +18,6 @@ namespace SigmabotSync.Domain.Configuration
         public const string CamposBD = "CamposBD";
         public const string BasePath = "BasePath";
         public const string TablaMetadata = "TablaMetadata";
+        public const string TablaPaths = "TablaPaths";
     }
 }

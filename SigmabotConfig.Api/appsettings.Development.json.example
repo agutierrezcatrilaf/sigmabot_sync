@@ -1,0 +1,8 @@
+{
+  "Database": {
+    "ConnectionString": "Server=YOUR_SERVER;Database=sigmabot;User Id=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+  },
+  "Cors": {
+    "AllowedOrigins": [ "http://localhost:4200" ]
+  }
+}

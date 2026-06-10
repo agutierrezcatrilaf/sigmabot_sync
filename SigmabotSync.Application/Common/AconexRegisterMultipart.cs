@@ -41,5 +41,18 @@ namespace SigmabotSync.Application.Common
             sb.Append("--").Append(boundary).Append("--");
             return sb.ToString();
         }
+
+        /// <summary>Multipart solo con XML (p. ej. Register con <c>HasFile=false</c>, marcador de posición).</summary>
+        public static string BuildRegisterBodyXmlOnly(string xmlDocument, string boundary)
+        {
+            if (string.IsNullOrEmpty(boundary))
+                throw new ArgumentException("boundary requerido.", nameof(boundary));
+
+            var sb = new StringBuilder();
+            sb.Append("--").Append(boundary).Append("\r\n\r\n");
+            sb.Append(xmlDocument ?? "").Append("\r\n");
+            sb.Append("--").Append(boundary).Append("--");
+            return sb.ToString();
+        }
     }
 }

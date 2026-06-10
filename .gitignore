@@ -17,8 +17,9 @@ packages/
 ## Ignore user-specific files
 *.userprefs
 
-## Ignore publish artifacts
+## Ignore publish artifacts (puede incluir appsettings.Production.json con credenciales)
 artifacts/
+publish/
 *.pubxml
 *.publishproj
 
@@ -27,3 +28,6 @@ artifacts/
 
 ## ConfigWeb: settings locales con credenciales (usar settings.json.example)
 SigmabotSync.ConfigWeb/settings.json
+
+## Config API: cadena de conexión local (usar appsettings.Development.json.example)
+SigmabotConfig.Api/appsettings.Development.json
