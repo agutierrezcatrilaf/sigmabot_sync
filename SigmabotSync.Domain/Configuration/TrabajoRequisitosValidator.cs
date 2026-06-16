@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SigmabotSync.Domain.Entities;
 
 namespace SigmabotSync.Domain.Configuration
@@ -8,6 +9,14 @@ namespace SigmabotSync.Domain.Configuration
     public static class TrabajoRequisitosValidator
     {
         public static IReadOnlyList<string> Validar(Trabajo t)
+        {
+            return Validar(t, codigosTipoActivos: null);
+        }
+
+        /// <param name="codigosTipoActivos">
+        /// Códigos activos desde tabla TiposTrabajo. Si se indica, reemplaza la lista fija en código.
+        /// </param>
+        public static IReadOnlyList<string> Validar(Trabajo t, IReadOnlyCollection<string> codigosTipoActivos)
         {
             var errores = new List<string>();
             if (t == null)
@@ -21,6 +30,11 @@ namespace SigmabotSync.Domain.Configuration
 
             if (string.IsNullOrWhiteSpace(t.Tipo))
                 errores.Add("Tipo es obligatorio.");
+            else if (codigosTipoActivos != null && codigosTipoActivos.Count > 0)
+            {
+                if (!codigosTipoActivos.Any(c => c.Equals(t.Tipo.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    errores.Add("Tipo debe ser un código activo del catálogo TiposTrabajo.");
+            }
             else if (!EsTipoConocido(t.Tipo))
                 errores.Add("Tipo debe ser uno de: " + TipoTrabajoIds.FileExtraction + ", " + TipoTrabajoIds.ProjectSync + ", "
                     + TipoTrabajoIds.FullExtraction + ", " + TipoTrabajoIds.FileUploadWithMetadata + ".");

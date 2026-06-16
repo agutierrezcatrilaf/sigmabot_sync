@@ -7,7 +7,7 @@ BEGIN
     CREATE TABLE [dbo].[Trabajos] (
         id                      INT             IDENTITY(1,1) NOT NULL PRIMARY KEY,
         Nombre                  NVARCHAR(200)   NULL,
-        Tipo                    NVARCHAR(100)   NULL,
+        Tipo                    NVARCHAR(100)   NULL,  -- Código de TiposTrabajo.Codigo (p. ej. FileExtraction)
         Estado                  NVARCHAR(50)    NULL,
         FechaUltimaEjecucion    DATETIME        NULL,
         ResultadoUltimaEjecucion NVARCHAR(50)   NULL,

@@ -13,15 +13,29 @@ public sealed class CatalogosController : ApiControllerBase
     public CatalogosController(IDatabaseConnectionProvider db) : base(db) { }
 
     [HttpGet("tipos-trabajo")]
-    public ActionResult<IReadOnlyList<string>> TiposTrabajo()
+    public IActionResult TiposTrabajo()
     {
-        return Ok(new[]
+        if (!Db.IsConfigured)
+            return NotConfigured();
+
+        try
         {
-            TipoTrabajoIds.FileExtraction,
-            TipoTrabajoIds.FullExtraction,
-            TipoTrabajoIds.FileUploadWithMetadata,
-            TipoTrabajoIds.ProjectSync
-        });
+            var svc = new TiposTrabajoEditorService(ConnectionString);
+            var list = svc.ListarActivos()
+                .Select(t => new TipoTrabajoDto
+                {
+                    Codigo = t.Codigo ?? string.Empty,
+                    Nombre = t.Nombre ?? t.Codigo ?? string.Empty,
+                    Descripcion = t.Descripcion,
+                    Orden = t.Orden
+                })
+                .ToList();
+            return Ok(list);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new ApiProblem { Message = ex.Message });
+        }
     }
 
     [HttpGet("estados-trabajo")]

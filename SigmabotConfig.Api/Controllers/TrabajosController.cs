@@ -52,7 +52,7 @@ public sealed class TrabajosController : ApiControllerBase
     {
         if (!Db.IsConfigured)
             return NotConfigured();
-        var errores = TrabajoRequisitosValidator.Validar(trabajo);
+        var errores = ValidarTrabajo(trabajo);
         if (errores.Count > 0)
             return ValidationProblem(errores);
 
@@ -75,7 +75,7 @@ public sealed class TrabajosController : ApiControllerBase
         if (!Db.IsConfigured)
             return NotConfigured();
         trabajo.Id = id;
-        var errores = TrabajoRequisitosValidator.Validar(trabajo);
+        var errores = ValidarTrabajo(trabajo);
         if (errores.Count > 0)
             return ValidationProblem(errores);
 
@@ -114,5 +114,25 @@ public sealed class TrabajosController : ApiControllerBase
         {
             return StatusCode(500, new ApiProblem { Message = ex.Message });
         }
+    }
+
+    private IReadOnlyList<string> ValidarTrabajo(Trabajo trabajo)
+    {
+        try
+        {
+            var tiposSvc = new TiposTrabajoEditorService(ConnectionString);
+            var codigos = tiposSvc.ListarActivos()
+                .Select(t => t.Codigo)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .ToList();
+            if (codigos.Count > 0)
+                return TrabajoRequisitosValidator.Validar(trabajo, codigos);
+        }
+        catch
+        {
+            // Tabla TiposTrabajo aún no creada: validación legacy por constantes.
+        }
+
+        return TrabajoRequisitosValidator.Validar(trabajo);
     }
 }

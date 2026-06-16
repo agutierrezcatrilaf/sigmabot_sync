@@ -58,6 +58,7 @@ namespace SigmabotSync.Application.Extraction
 
         public void Correos(string proyectID)
         {
+            ResetCorreosAppState();
             DbCheckTmpTables();
             DatosActuales(proyectID);
 
@@ -72,8 +73,18 @@ namespace SigmabotSync.Application.Extraction
             // 3. Insertar en las tablas finales
             DbUpdateProjectData(proyectID);
 
-            Utilities.Wlog($"INBOX: Obtenidos={AppState.totalCorreosRecibidosAconex}, Excluidos={AppState.totalCorreosRecibidosDescartados}, Procesados={AppState.totalCorreosRecibidosProcesados}", 1);
-            Utilities.Wlog($"SENTBOX: Obtenidos={AppState.totalCorreosEnviadosAconex}, Excluidos={AppState.totalCorreosEnviadosDescartados}, Procesados={AppState.totalCorreosEnviadosProcesados}", 1);
+            Utilities.Wlog($"INBOX: Obtenidos={AppState.totalCorreosRecibidosAconex}, Excluidos={AppState.totalCorreosRecibidosDescartados}, Procesados={AppState.totalCorreosRecibidosProcesados}, Documentos={DocumentosRecibidosTmp.Rows.Count}", 1);
+            Utilities.Wlog($"SENTBOX: Obtenidos={AppState.totalCorreosEnviadosAconex}, Excluidos={AppState.totalCorreosEnviadosDescartados}, Procesados={AppState.totalCorreosEnviadosProcesados}, Documentos={DocumentosEnviadosTmp.Rows.Count}", 1);
+        }
+
+        private static void ResetCorreosAppState()
+        {
+            AppState.totalCorreosRecibidosProcesados = 0;
+            AppState.totalCorreosEnviadosProcesados = 0;
+            AppState.totalCorreosRecibidosDescartados = 0;
+            AppState.totalCorreosEnviadosDescartados = 0;
+            AppState.totalCorreosRecibidosAconex = 0;
+            AppState.totalCorreosEnviadosAconex = 0;
         }
 
         private void DbCheckTmpTables()
@@ -171,27 +182,21 @@ namespace SigmabotSync.Application.Extraction
                 }
 
                 // Recibidos
-                using (var actualDB = new DataTable())
-                using (var da = new SqlDataAdapter(
-                    "SELECT COUNT(*) AS total FROM CorreosRecibidos WHERE [ACXProjectId] = @projid", _dbConMails))
+                using (var cmd = new SqlCommand(
+                    "SELECT COUNT(*) FROM CorreosRecibidos WHERE [ACXProjectId] = @projid", _dbConMails))
                 {
-                    da.SelectCommand.Parameters.AddWithValue("@projid", projid);
-                    da.Fill(actualDB);
-
-                    var totalDocs = actualDB.Rows.Count > 0 ? actualDB.Rows[0]["total"].ToString() : "0";
-                    Utilities.Wlog("Correos: Transmisiones Recibidas antes del proceso " + totalDocs, 1);
+                    cmd.Parameters.AddWithValue("@projid", projid);
+                    var total = Convert.ToInt32(cmd.ExecuteScalar());
+                    Utilities.Wlog("Correos: Transmisiones Recibidas antes del proceso " + total, 1);
                 }
 
                 // Enviados
-                using (var actualDB = new DataTable())
-                using (var da = new SqlDataAdapter(
-                    "SELECT COUNT(*) AS total FROM CorreosEnviados WHERE [ACXProjectId] = @projid", _dbConMails))
+                using (var cmd = new SqlCommand(
+                    "SELECT COUNT(*) FROM CorreosEnviados WHERE [ACXProjectId] = @projid", _dbConMails))
                 {
-                    da.SelectCommand.Parameters.AddWithValue("@projid", projid);
-                    da.Fill(actualDB);
-
-                    var totalDocs = actualDB.Rows.Count > 0 ? actualDB.Rows[0]["total"].ToString() : "0";
-                    Utilities.Wlog("Correos: Transmisiones Enviadas antes del proceso " + totalDocs, 1);
+                    cmd.Parameters.AddWithValue("@projid", projid);
+                    var total = Convert.ToInt32(cmd.ExecuteScalar());
+                    Utilities.Wlog("Correos: Transmisiones Enviadas antes del proceso " + total, 1);
                 }
             }
             catch (Exception ex)
