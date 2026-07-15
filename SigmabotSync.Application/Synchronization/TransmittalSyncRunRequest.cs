@@ -9,6 +9,8 @@ namespace SigmabotSync.Application.Synchronization
         public string BaseUrl { get; set; }
         public string AuthorizationHeaderBase64 { get; set; }
         public string IntegrationId { get; set; }
+        public string OrgId { get; set; }
+        public string UserId { get; set; }
         public int DiasLookback { get; set; } = 30;
         public IReadOnlyList<ProyectoSyncItem> Proyectos { get; set; }
     }

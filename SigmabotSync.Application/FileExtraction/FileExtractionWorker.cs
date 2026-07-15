@@ -157,17 +157,21 @@ namespace SigmabotSync.Application.FileExtraction
             try
             {
                 return await Utilities.EjecutarConReintentosAsync(
-                    async () => await _searchPort.SearchRegisterPageAsync(
-                        baseUrl,
-                        _config.ProjectId,
-                        _config.OrgId,
-                        _config.UserId,
-                        _config.AuthorizationHeader,
-                        fields,
-                        _config.ResultSize,
-                        pageNumber,
-                        throwIfNotSuccess: true,
-                        CancellationToken.None),
+                    async () =>
+                    {
+                        var result = await _searchPort.SearchRegisterPageAsync(
+                            baseUrl,
+                            _config.ProjectId,
+                            _config.OrgId,
+                            _config.UserId,
+                            _config.AuthorizationHeader,
+                            fields,
+                            _config.ResultSize,
+                            pageNumber,
+                            throwIfNotSuccess: true,
+                            CancellationToken.None).ConfigureAwait(false);
+                        return result.Page;
+                    },
                     $"FileExtraction: Error al obtener página {pageNumber}"
                 );
             }

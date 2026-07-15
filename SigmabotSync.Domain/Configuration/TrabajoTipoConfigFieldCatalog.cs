@@ -16,14 +16,14 @@ namespace SigmabotSync.Domain.Configuration
                 "Id proyecto Aconex (lado 1)",
                 tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
                 tiposDondeObligatorio: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },
-                ayuda: "ProjectId en Aconex (numérico). En ProjectSync es el primer proyecto del par."),
+                ayuda: "ProjectId en Aconex (lado 1). En ProjectSync se lee su sentbox y se sincroniza en el lado 2."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.IdProyecto2,
                 "Id proyecto Aconex (lado 2)",
                 tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
                 tiposDondeObligatorio: Array.Empty<string>(),
-                ayuda: "Segundo proyecto del par. Opcional hasta tener el Id; cuando esté configurado se procesará su inbox también."),
+                ayuda: "Segundo proyecto del par. Se lee su sentbox y se sincroniza en el lado 1 (y viceversa)."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.Proyecto,
@@ -44,7 +44,7 @@ namespace SigmabotSync.Domain.Configuration
                 "Días lookback transmitals",
                 tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
                 tiposDondeObligatorio: Array.Empty<string>(),
-                ayuda: "Días hacia atrás para buscar transmitals en inbox. Default 30."),
+                ayuda: "Días hacia atrás para buscar transmitals en inbox del origen. Default 30."),
 
             new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.CredencialAconex,

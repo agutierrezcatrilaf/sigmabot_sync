@@ -11,8 +11,11 @@ namespace SigmabotSync.Domain.Ports
     /// </summary>
     public interface IAconexRegisterSearchPort
     {
-        /// <param name="throwIfNotSuccess">Si es false, devuelve null ante respuesta HTTP no exitosa (comportamiento DocumentExtraction).</param>
-        Task<Rootobject> SearchRegisterPageAsync(
+        /// <param name="throwIfNotSuccess">Si es true, lanza ante HTTP no exitoso. Si es false, devuelve error en <see cref="AconexRegisterSearchResult"/>.</param>
+        /// <param name="searchQuery">Filtro Lucene (legado). Preferir <paramref name="filterDocumentNo"/>.</param>
+        /// <param name="filterDocumentNo">Filtro directo en body JSON (<c>docno</c>), formato soportado por Aconex register/search.</param>
+        /// <param name="filterRevision">Filtro directo en body JSON (<c>revision</c>); omitir si revisión comodín.</param>
+        Task<AconexRegisterSearchResult> SearchRegisterPageAsync(
             string baseUrl,
             string projectId,
             string orgId,
@@ -22,6 +25,9 @@ namespace SigmabotSync.Domain.Ports
             int resultSize,
             int pageNumber,
             bool throwIfNotSuccess = true,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellationToken = default,
+            string searchQuery = null,
+            string filterDocumentNo = null,
+            string filterRevision = null);
     }
 }

@@ -82,7 +82,7 @@ namespace SigmabotSync.Domain.Entities
             return list;
         }
 
-        /// <summary>Proyectos del par de sincronización (simétrico; orden sin significado de dirección).</summary>
+        /// <summary>Proyectos del par (lado 1 = IdProyecto, lado 2 = IdProyecto2). ProjectSync cruza sentbox origen → registro destino.</summary>
         public List<ProyectoSyncItem> GetProyectosSync()
         {
             var list = new List<ProyectoSyncItem>(2);

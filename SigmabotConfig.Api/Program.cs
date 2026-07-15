@@ -1,3 +1,4 @@
+using SigmabotConfig.Api.Auth;
 using SigmabotConfig.Api.Configuration;
 using SigmabotConfig.Api.Services;
 
@@ -5,9 +6,26 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
 builder.Services.Configure<CorsSettings>(builder.Configuration.GetSection(CorsSettings.SectionName));
+builder.Services.Configure<AutorizadorSettings>(builder.Configuration.GetSection(AutorizadorSettings.SectionName));
 builder.Services.AddSingleton<IDatabaseConnectionProvider, DatabaseConnectionProvider>();
+builder.Services.AddScoped<IAutorizadorValidationService, AutorizadorValidationService>();
+builder.Services.AddScoped<AuthFilter>();
 
-builder.Services.AddControllers()
+var autorizadorUrl = builder.Configuration.GetSection(AutorizadorSettings.SectionName)
+    .Get<AutorizadorSettings>()?.UrlApi?.Trim().TrimEnd('/');
+builder.Services.AddHttpClient("Autorizador", client =>
+{
+    if (!string.IsNullOrWhiteSpace(autorizadorUrl))
+    {
+        client.BaseAddress = new Uri(autorizadorUrl + "/");
+    }
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<AuthFilter>();
+    })
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;

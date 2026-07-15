@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace SigmabotSync.Application.Synchronization
 {
     /// <summary>
-    /// Sincronización bidireccional por transmitals: lee inbox de cada proyecto del par y aplica marcadores/archivos.
+    /// Sincronización cross-project: lee transmitals del origen y crea/actualiza documentos en el registro del destino.
     /// </summary>
     public sealed class TransmittalSyncWorker
     {
@@ -31,26 +31,42 @@ namespace SigmabotSync.Application.Synchronization
                 return;
             }
 
-            OnStatus?.Invoke($"ProjectSync por transmitals: {proyectos.Count} proyecto(s), lookback {request.DiasLookback} días.");
-
-            foreach (var proyecto in proyectos)
+            if (proyectos.Count < 2)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                OnStatus?.Invoke($"--- Inbox: {proyecto.Label} ({proyecto.ProjectId}) ---");
-
-                var result = await _service.ProcessProjectInboxAsync(
-                    request,
-                    proyecto,
-                    msg => OnStatus?.Invoke(msg),
-                    cancellationToken).ConfigureAwait(false);
-
-                OnStatus?.Invoke(
-                    $"Resumen {proyecto.Label}: mails={result.TotalMails}, procesados={result.ProcessedMails}, " +
-                    $"omitidos={result.SkippedAlreadyProcessed}, marcadores={result.PlaceholdersCreated}, " +
-                    $"archivos={result.FilesApplied}, errores={result.Errors}");
+                OnStatus?.Invoke("ProjectSync requiere dos proyectos (lado 1 y lado 2) para sincronización cruzada.");
+                return;
             }
 
-            OnStatus?.Invoke("Sincronización por transmitals finalizada.");
+            OnStatus?.Invoke($"ProjectSync cross-project: {proyectos.Count} proyecto(s), lookback {request.DiasLookback} días.");
+
+            for (int i = 0; i < proyectos.Count; i++)
+            {
+                for (int j = 0; j < proyectos.Count; j++)
+                {
+                    if (i == j)
+                        continue;
+
+                    var source = proyectos[i];
+                    var target = proyectos[j];
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    OnStatus?.Invoke($"--- Origen: {source.Label} ({source.ProjectId}) → Destino: {target.Label} ({target.ProjectId}) ---");
+
+                    var result = await _service.ProcessCrossProjectAsync(
+                        request,
+                        source,
+                        target,
+                        msg => OnStatus?.Invoke(msg),
+                        cancellationToken).ConfigureAwait(false);
+
+                    OnStatus?.Invoke(
+                        $"Resumen {source.Label} → {target.Label}: mails={result.TotalMails}, procesados={result.ProcessedMails}, " +
+                        $"omitidos={result.SkippedAlreadyProcessed}, marcadores={result.PlaceholdersCreated}, " +
+                        $"archivos={result.FilesApplied}, errores={result.Errors}");
+                }
+            }
+
+            OnStatus?.Invoke("Sincronización cross-project finalizada.");
         }
     }
 }

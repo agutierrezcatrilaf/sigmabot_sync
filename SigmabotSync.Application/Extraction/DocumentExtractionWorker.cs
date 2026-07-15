@@ -344,7 +344,7 @@ namespace SigmabotSync.Application.Extraction
             string orgid = _config["OrgId"];
             string userId = _config["userid"];
 
-            return await _registerSearchPort.SearchRegisterPageAsync(
+            var result = await _registerSearchPort.SearchRegisterPageAsync(
                 baseUrl,
                 projid,
                 orgid,
@@ -355,6 +355,7 @@ namespace SigmabotSync.Application.Extraction
                 page,
                 throwIfNotSuccess: false,
                 CancellationToken.None).ConfigureAwait(false);
+            return result?.Page;
         }
 
         public void AgregaDocumentoNuevo(Searchresult mdoc, string projectId)

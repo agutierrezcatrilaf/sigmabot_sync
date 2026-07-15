@@ -21,7 +21,7 @@ namespace SigmabotSync.Console
         /// Pon null para usar argumentos de línea de comandos o el scheduler.
         /// </summary>
 #if DEBUG
-        private static readonly int? DebugIdTrabajo = 4;
+        private static readonly int? DebugIdTrabajo = 10008;
 #else
         private static readonly int? DebugIdTrabajo = null;
 #endif
@@ -505,7 +505,7 @@ namespace SigmabotSync.Console
         }
 
         /// <summary>
-        /// Ejecuta ProjectSync: sincronización por transmitals (inbox de cada proyecto del par).
+        /// Ejecuta ProjectSync: lee transmitals (inbox del origen) y sincroniza documentos en el registro del otro proyecto.
         /// </summary>
         private static async Task EjecutarProjectSyncAsync(
             TrabajoConfiguracion trabajoConfig,
@@ -529,11 +529,16 @@ namespace SigmabotSync.Console
             var httpGet = new AconexHttpGetAdapter();
             IMailTransmittalReadPort mailRead = new AconexMailTransmittalAdapter(httpGet);
             ITransmittalSyncStatePort syncState = new TransmittalSyncStateService(bdConnection);
+            ITransmittalSyncFieldMapPort fieldMap = new TransmittalSyncFieldMapService(bdConnection);
+            IAconexDocumentCatalogPort documentCatalog = new AconexDocumentCatalogService(bdConnection);
 
             using (var registerWritePort = new AconexRegisterWriteAdapter())
             using (var contentPort = new AconexRegisterDocumentContentAdapter())
+            using (var registerSearchPort = new AconexRegisterSearchAdapter())
+            using (var registerMetadataPort = new AconexRegisterMetadataAdapter())
             {
-                var syncService = new TransmittalSyncService(mailRead, registerWritePort, contentPort, syncState);
+                var syncService = new TransmittalSyncService(
+                    mailRead, registerWritePort, contentPort, registerSearchPort, registerMetadataPort, fieldMap, syncState, documentCatalog);
                 var syncWorker = new TransmittalSyncWorker(syncService);
 
                 syncWorker.OnStatus += status =>
@@ -547,6 +552,8 @@ namespace SigmabotSync.Console
                     BaseUrl = baseUrl,
                     AuthorizationHeaderBase64 = auth,
                     IntegrationId = credAconex.Aconex_IntegrationId ?? "",
+                    OrgId = credAconex.Aconex_OrganizationId ?? "",
+                    UserId = credAconex.Aconex_UserId ?? "",
                     DiasLookback = diasLookback,
                     Proyectos = proyectos
                 };

@@ -9,7 +9,7 @@ using SigmabotSync.Domain.Ports;
 
 namespace SigmabotSync.Infrastructure.External
 {
-    /// <summary>List Mail (inbox, corrtypeid:23) + View Mail Metadata para ProjectSync.</summary>
+    /// <summary>List Mail (inbox/sentbox, corrtypeid:23) + View Mail Metadata para ProjectSync.</summary>
     public sealed class AconexMailTransmittalAdapter : IMailTransmittalReadPort
     {
         private const string MailContentType = "application/vnd.aconex.mail.v3+xml";
@@ -23,19 +23,21 @@ namespace SigmabotSync.Infrastructure.External
             _httpGet = httpGet ?? throw new ArgumentNullException(nameof(httpGet));
         }
 
-        public async Task<IReadOnlyList<TransmittalMailSummary>> ListInboxTransmittalsAsync(
+        public async Task<IReadOnlyList<TransmittalMailSummary>> ListTransmittalsAsync(
             string baseUrl,
             string projectId,
             string authorizationHeaderBase64,
             DateTime desdeUtc,
             DateTime hastaUtc,
+            string mailbox,
             CancellationToken cancellationToken = default)
         {
+            string mailBox = string.IsNullOrWhiteSpace(mailbox) ? "inbox" : mailbox.Trim().ToLowerInvariant();
             string root = NormalizeBaseUrl(baseUrl);
             string fechaInicio = desdeUtc.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             string fechaFin = hastaUtc.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-            long totalPages = await GetTotalPagesAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, cancellationToken)
+            long totalPages = await GetTotalPagesAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, cancellationToken)
                 .ConfigureAwait(false);
             if (totalPages <= 0)
                 return Array.Empty<TransmittalMailSummary>();
@@ -43,7 +45,7 @@ namespace SigmabotSync.Infrastructure.External
             var results = new List<TransmittalMailSummary>();
             for (long page = 1; page <= totalPages; page++)
             {
-                string pageXml = await GetPageXmlAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, page, cancellationToken)
+                string pageXml = await GetPageXmlAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, page, cancellationToken)
                     .ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(pageXml))
                     continue;
@@ -82,9 +84,10 @@ namespace SigmabotSync.Infrastructure.External
             string authorizationHeaderBase64,
             string fechaInicio,
             string fechaFin,
+            string mailbox,
             CancellationToken cancellationToken)
         {
-            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, pageNumber: null);
+            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, pageNumber: null);
             string responseXml = await _httpGet.GetStringAsync(new AconexHttpGetRequest
             {
                 Url = url,
@@ -113,10 +116,11 @@ namespace SigmabotSync.Infrastructure.External
             string authorizationHeaderBase64,
             string fechaInicio,
             string fechaFin,
+            string mailbox,
             long pageNumber,
             CancellationToken cancellationToken)
         {
-            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, pageNumber);
+            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, pageNumber);
             return _httpGet.GetStringAsync(new AconexHttpGetRequest
             {
                 Url = url,
@@ -127,9 +131,10 @@ namespace SigmabotSync.Infrastructure.External
             }, cancellationToken);
         }
 
-        private static string BuildListMailUrl(string root, string projectId, string fechaInicio, string fechaFin, long? pageNumber)
+        private static string BuildListMailUrl(string root, string projectId, string fechaInicio, string fechaFin, string mailbox, long? pageNumber)
         {
-            string url = $"{root}/api/projects/{projectId}/mail?mail_box=inbox" +
+            string mailBox = string.IsNullOrWhiteSpace(mailbox) ? "inbox" : mailbox.Trim().ToLowerInvariant();
+            string url = $"{root}/api/projects/{projectId}/mail?mail_box={mailBox}" +
                          "&return_fields=docno,sentdate,subject,fromUserDetails,inreftomailno,corrtypeid,hasAttachments" +
                          "&page_size=" + PageSize +
                          "&search_type=PAGED" +

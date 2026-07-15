@@ -12,9 +12,26 @@ namespace SigmabotSync.Application.Common
             {
                 var doc = new XmlDocument();
                 doc.LoadXml(responseText);
+
+                // Preferir hijo DocumentId (InnerText del contenedor concatena ej. "…idtrue").
+                XmlNode idNode =
+                    doc.SelectSingleNode("//*[local-name()='RegisterDocumentResult']/*[local-name()='DocumentId']")
+                    ?? doc.SelectSingleNode("//*[local-name()='DocumentId']")
+                    ?? doc.SelectSingleNode("//RegisterDocumentResult/DocumentId");
+                if (idNode != null && !string.IsNullOrWhiteSpace(idNode.InnerText))
+                    return idNode.InnerText.Trim();
+
                 XmlNode node = doc.SelectSingleNode("//RegisterDocumentResult")
                     ?? doc.SelectSingleNode("/*[local-name()='RegisterDocumentResult']");
-                return node?.InnerText?.Trim();
+                string raw = node?.InnerText?.Trim();
+                if (string.IsNullOrWhiteSpace(raw))
+                    return null;
+
+                // Fallback: solo dígitos iniciales si el texto trae basura concatenada.
+                int end = 0;
+                while (end < raw.Length && char.IsDigit(raw[end]))
+                    end++;
+                return end > 0 ? raw.Substring(0, end) : raw;
             }
             catch
             {

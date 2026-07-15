@@ -1,3 +1,4 @@
+using System.Globalization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using SigmabotSync.Domain.Models.Extraction;
 using SigmabotSync.Domain.Ports;
 
@@ -25,7 +27,7 @@ namespace SigmabotSync.Infrastructure.External
             };
         }
 
-        public async Task<Rootobject> SearchRegisterPageAsync(
+        public async Task<AconexRegisterSearchResult> SearchRegisterPageAsync(
             string baseUrl,
             string projectId,
             string orgId,
@@ -35,25 +37,43 @@ namespace SigmabotSync.Infrastructure.External
             int resultSize,
             int pageNumber,
             bool throwIfNotSuccess = true,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string searchQuery = null,
+            string filterDocumentNo = null,
+            string filterRevision = null)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new ArgumentException("baseUrl requerido.", nameof(baseUrl));
             if (string.IsNullOrWhiteSpace(projectId))
                 throw new ArgumentException("projectId requerido.", nameof(projectId));
+            if (resultSize <= 0)
+                resultSize = 25;
+            if (pageNumber <= 0)
+                pageNumber = 1;
 
             string root = baseUrl.TrimEnd('/');
             string uri = $"{root}/api/projects/{projectId}/register/search";
 
-            var body = new
+            bool filterByDocNo = !string.IsNullOrWhiteSpace(filterDocumentNo);
+            var body = new Dictionary<string, object>
             {
-                orgId = orgId,
-                userId = userId,
-                returnFields = returnFields?.ToList() ?? new List<string>(),
-                resultSize = resultSize.ToString(),
-                showDocHistory = "true",
-                pageNumber = pageNumber.ToString()
+                ["orgId"] = orgId,
+                ["userId"] = userId,
+                ["returnFields"] = returnFields?.ToList() ?? new List<string>(),
+                ["resultSize"] = resultSize.ToString(CultureInfo.InvariantCulture),
+                ["showDocHistory"] = filterByDocNo ? "false" : "true",
+                ["pageNumber"] = pageNumber.ToString(CultureInfo.InvariantCulture)
             };
+            if (filterByDocNo)
+            {
+                body["docno"] = filterDocumentNo.Trim();
+                if (!string.IsNullOrWhiteSpace(filterRevision))
+                    body["revision"] = filterRevision.Trim();
+            }
+            else if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                body["searchQuery"] = searchQuery.Trim();
+            }
 
             string jsonBody = JsonConvert.SerializeObject(body);
             using (var request = new HttpRequestMessage(HttpMethod.Post, uri))
@@ -64,17 +84,57 @@ namespace SigmabotSync.Infrastructure.External
 
                 using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
+                    string responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    responseString = responseString?.Replace("\u0003", "") ?? "";
+
                     if (!response.IsSuccessStatusCode)
                     {
                         if (!throwIfNotSuccess)
-                            return null;
+                            return AconexRegisterSearchResult.Failure((int)response.StatusCode, responseString, requestBody: jsonBody);
                         response.EnsureSuccessStatusCode();
                     }
 
-                    string responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    responseString = responseString.Replace("\u0003", "");
-                    return JsonConvert.DeserializeObject<Rootobject>(responseString);
+                    if (TryParseAconexError(responseString, out string errorCode, out string errorDescription))
+                    {
+                        if (!throwIfNotSuccess)
+                        {
+                            return AconexRegisterSearchResult.Failure(
+                                (int)response.StatusCode,
+                                responseString,
+                                errorCode,
+                                errorDescription,
+                                jsonBody);
+                        }
+
+                        throw new InvalidOperationException(
+                            $"Aconex register/search ({errorCode}): {errorDescription}");
+                    }
+
+                    var page = JsonConvert.DeserializeObject<Rootobject>(responseString);
+                    return AconexRegisterSearchResult.Success(page, (int)response.StatusCode, responseString, jsonBody);
                 }
+            }
+        }
+
+        private static bool TryParseAconexError(string responseString, out string errorCode, out string errorDescription)
+        {
+            errorCode = null;
+            errorDescription = null;
+            if (string.IsNullOrWhiteSpace(responseString))
+                return false;
+
+            try
+            {
+                JObject json = JObject.Parse(responseString);
+                errorCode = json["errorCode"]?.ToString();
+                if (string.IsNullOrWhiteSpace(errorCode))
+                    return false;
+                errorDescription = json["errorDescription"]?.ToString();
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
