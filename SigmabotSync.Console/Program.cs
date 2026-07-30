@@ -505,7 +505,7 @@ namespace SigmabotSync.Console
         }
 
         /// <summary>
-        /// Ejecuta ProjectSync: lee transmitals (inbox del origen) y sincroniza documentos en el registro del otro proyecto.
+        /// Ejecuta ProjectSync: lee transmitals (inbox lado 1 / sentbox lado 2) y sincroniza en el otro registro.
         /// </summary>
         private static async Task EjecutarProjectSyncAsync(
             TrabajoConfiguracion trabajoConfig,
@@ -524,6 +524,19 @@ namespace SigmabotSync.Console
             foreach (var p in proyectos)
                 SigmabotSync.Application.Common.Utilities.Wlog($"  Proyecto: {p.Label} ({p.ProjectId})", 0);
             SigmabotSync.Application.Common.Utilities.Wlog($"  DiasLookbackTransmittal={diasLookback}", 0);
+            if (!string.IsNullOrWhiteSpace(trabajoConfig.IdEstatusDocumentoDestino))
+                SigmabotSync.Application.Common.Utilities.Wlog(
+                    $"  IdEstatusDocumentoDestino={trabajoConfig.IdEstatusDocumentoDestino.Trim()} (proyecto destino {trabajoConfig.IdProyecto})", 0);
+            if (!string.IsNullOrWhiteSpace(trabajoConfig.SubjectFiltroTransmittalVuelta))
+                SigmabotSync.Application.Common.Utilities.Wlog(
+                    $"  SubjectFiltroTransmittalVuelta={trabajoConfig.SubjectFiltroTransmittalVuelta.Trim()}", 0);
+            if (!string.IsNullOrWhiteSpace(trabajoConfig.CodigoProyectoSalfa))
+                SigmabotSync.Application.Common.Utilities.Wlog(
+                    $"  CodigoProyectoSalfa={trabajoConfig.CodigoProyectoSalfa.Trim()}", 0);
+            var camposRegistroDestino = trabajoConfig.ToReturnFieldsRegistroDestino();
+            if (camposRegistroDestino != null && camposRegistroDestino.Count > 0)
+                SigmabotSync.Application.Common.Utilities.Wlog(
+                    $"  CamposConsultaRegistroDestino={camposRegistroDestino.Count} campo(s)", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             var httpGet = new AconexHttpGetAdapter();
@@ -555,7 +568,14 @@ namespace SigmabotSync.Console
                     OrgId = credAconex.Aconex_OrganizationId ?? "",
                     UserId = credAconex.Aconex_UserId ?? "",
                     DiasLookback = diasLookback,
-                    Proyectos = proyectos
+                    Proyectos = proyectos,
+                    IdEstatusDocumentoDestino = trabajoConfig.IdEstatusDocumentoDestino?.Trim(),
+                    IdProyectoEstatusFijo = string.IsNullOrWhiteSpace(trabajoConfig.IdProyecto)
+                        ? null
+                        : trabajoConfig.IdProyecto.Trim(),
+                    SubjectFiltroTransmittalVuelta = trabajoConfig.SubjectFiltroTransmittalVuelta?.Trim(),
+                    CamposConsultaRegistroDestino = camposRegistroDestino,
+                    CodigoProyectoSalfa = trabajoConfig.CodigoProyectoSalfa?.Trim()
                 };
 
                 await syncWorker.RunAsync(request);

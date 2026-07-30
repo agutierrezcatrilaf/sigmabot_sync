@@ -1,7 +1,9 @@
 -- Equivalencias ProjectSync IdTrabajo 10008 (Codelco → SALFA).
--- Discipline: Especialidad_singleSelect (origen) → Discipline_singleSelect (destino).
--- TipoDocumento: TipoDeDocumento_singleSelect (origen) → TipoDeDocumento_singleSelect (destino).
-
+-- Discipline: usar Insert_TransmittalSyncEquivalencia_Discipline_10008.sql (HomologacionDiscipline.xlsx).
+-- TipoDocumento: usar Insert_TransmittalSyncEquivalencia_TipoDocumento_10008.sql (HomologacionTipoDocumento.xlsx).
+-- Cwa: usar Insert_TransmittalSyncEquivalencia_Cwa_10008.sql (HomologacionCWA.xlsx).
+-- Discipline: match EXACTO de ValorOrigen (texto completo desde Aconex).
+-- TipoDocumento: ValorOrigen = código; el texto Aconex se resuelve por prefijo al inicio.
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 GO
@@ -34,16 +36,29 @@ WHEN NOT MATCHED THEN
     INSERT (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Tipo, ValorOrigen, ValorDestino)
     VALUES (s.IdTrabajo, s.ACXProjectIdOrigen, s.ACXProjectIdDestino, s.Tipo, s.ValorOrigen, s.ValorDestino);
 
--- TipoDocumento (Codelco → SALFA)
+-- TipoDocumento (Codelco → SALFA). ValorOrigen = código al inicio del texto Aconex (prefijo).
 MERGE TransmittalSyncEquivalencia AS t
 USING (VALUES
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'201OH - P & ID',                         @DestDiagrama),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'206CA-PLANOS DE PIEZAS ESPECIALES',       N'PDD-Plano de Detalles'),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'500AR - ESQUEMAS',                        N'PDD-Plano de Detalles'),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'ESPEL - ESPECIFICACION',                  @DestEspec),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'HDDES - HOJA DE DATOS',                   N'HDD-Hoja de Datos'),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'MNLCI - MANUAL',                          N'MAN-Manual'),
-    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'INDCP - INFORME DIARIO (SOLO PARA ESPECIALIDAD CP)', N'IAD-Informe de Avance Diario')
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'300CA',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'301CA',  N'PDN-Plano de Disposici' + NCHAR(243) + N'n'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'303CA',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'400CA',  N'PDM-Plano de Montaje'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'500CA',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'502CA',  N'ISO-Isom' + NCHAR(233) + N'trico'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'600CA',  N'PLA-Plano'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'000OH',  N'EST-Est' + NCHAR(225) + N'ndar'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'1000OH', N'PDN-Plano de Disposici' + NCHAR(243) + N'n'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'101OH',  N'PDG-Plano de Disposici' + NCHAR(243) + N'n General'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'102OH',  N'PDG-Plano de Disposici' + NCHAR(243) + N'n General'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'103OH',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'200OH',  N'PDO-Plano de Dise' + NCHAR(241) + N'o'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'201OH',  @DestDiagrama),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'206CA',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'500AR',  N'PDD-Plano de Detalles'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'ESPEL',   @DestEspec),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'HDDES',   N'HDD-Hoja de Datos'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'MNLCI',   N'MAN-Manual'),
+    (@IdTrabajo, @Codelco, @Salfa, N'TipoDocumento', N'INDCP',   N'IAD-Informe de Avance Diario')
 ) AS s (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Tipo, ValorOrigen, ValorDestino)
 ON  t.IdTrabajo = s.IdTrabajo
 AND t.ACXProjectIdOrigen = s.ACXProjectIdOrigen
@@ -55,6 +70,24 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
     INSERT (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Tipo, ValorOrigen, ValorDestino)
     VALUES (s.IdTrabajo, s.ACXProjectIdOrigen, s.ACXProjectIdDestino, s.Tipo, s.ValorOrigen, s.ValorDestino);
+
+-- Desactivar filas TipoDocumento legacy (texto completo) reemplazadas por código.
+UPDATE TransmittalSyncEquivalencia
+SET Activo = 0, UpdatedAt = SYSUTCDATETIME()
+WHERE IdTrabajo = @IdTrabajo
+  AND ACXProjectIdOrigen = @Codelco
+  AND ACXProjectIdDestino = @Salfa
+  AND Tipo = N'TipoDocumento'
+  AND Activo = 1
+  AND ValorOrigen IN (
+    N'201OH - P & ID',
+    N'206CA-PLANOS DE PIEZAS ESPECIALES',
+    N'500AR - ESQUEMAS',
+    N'ESPEL - ESPECIFICACION',
+    N'HDDES - HOJA DE DATOS',
+    N'MNLCI - MANUAL',
+    N'INDCP - INFORME DIARIO (SOLO PARA ESPECIALIDAD CP)'
+  );
 
 SELECT Tipo, ValorOrigen, ValorDestino
 FROM TransmittalSyncEquivalencia

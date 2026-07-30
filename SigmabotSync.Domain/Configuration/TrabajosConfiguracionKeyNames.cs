@@ -11,6 +11,8 @@ namespace SigmabotSync.Domain.Configuration
         public const string IdProyecto2 = "IdProyecto2";
         public const string Proyecto2 = "Proyecto2";
         public const string DiasLookbackTransmittal = "DiasLookbackTransmittal";
+        /// <summary>Primer segmento del docno SALFA (ida Codelco→SALFA). No es el N° contrato Codelco.</summary>
+        public const string CodigoProyectoSalfa = "CodigoProyectoSalfa";
         public const string CredencialAconex = "CredencialAconex";
         public const string CredencialBD = "CredencialBD";
         public const string CamposConsulta = "CamposConsulta";
@@ -19,5 +21,11 @@ namespace SigmabotSync.Domain.Configuration
         public const string BasePath = "BasePath";
         public const string TablaMetadata = "TablaMetadata";
         public const string TablaPaths = "TablaPaths";
+        /// <summary>idEstatus fijo al registrar en el proyecto destino (lado 1). Acepta id o nombre en EstatusDocumentos.</summary>
+        public const string IdEstatusDocumentoDestino = "IdEstatusDocumentoDestino";
+        /// <summary>En vuelta (SALFA→Codelco), solo procesar transmitals cuyo Subject contenga este texto (ej. Final).</summary>
+        public const string SubjectFiltroTransmittalVuelta = "SubjectFiltroTransmittalVuelta";
+        /// <summary>returnFields extra para register/search del proyecto destino antes de supersede (CSV o JSON array).</summary>
+        public const string CamposConsultaRegistroDestino = "CamposConsultaRegistroDestino";
     }
 }

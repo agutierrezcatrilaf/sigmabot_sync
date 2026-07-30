@@ -30,6 +30,9 @@ namespace SigmabotSync.Domain.Entities
         /// <summary>Días hacia atrás para buscar transmitals en inbox (TrabajosConfiguracion Nombre=DiasLookbackTransmittal). Default 30.</summary>
         public int? DiasLookbackTransmittal { get; set; }
 
+        /// <summary>Código proyecto SALFA para nomenclatura docno (TrabajosConfiguracion Nombre=CodigoProyectoSalfa). Ej. 10031671.</summary>
+        public string CodigoProyectoSalfa { get; set; }
+
         /// <summary>Nombres de campos para la consulta API (returnFields). Comma-separated o JSON array. Orden = CamposResponse y CamposBD.</summary>
         public string CamposConsulta { get; set; }
 
@@ -53,6 +56,24 @@ namespace SigmabotSync.Domain.Entities
 
         /// <summary>Id de la credencial BD en tabla Credenciales (desde TrabajosConfiguracion Nombre=CredencialBD).</summary>
         public int? CredencialBDId { get; set; }
+
+        /// <summary>
+        /// idEstatus fijo al registrar documentos en el proyecto destino (lado 1, ej. Codelco).
+        /// Acepta idEstatus numérico o nombre en EstatusDocumentos. Solo ProjectSync.
+        /// </summary>
+        public string IdEstatusDocumentoDestino { get; set; }
+
+        /// <summary>
+        /// Vuelta SALFA→Codelco: solo transmitals cuyo Subject contenga este texto (ej. Final).
+        /// Vacío = sin filtro por subject.
+        /// </summary>
+        public string SubjectFiltroTransmittalVuelta { get; set; }
+
+        /// <summary>
+        /// ProjectSync supersede: campos adicionales en register/search del destino (Codelco) para leer project fields.
+        /// CSV o JSON array (ej. Proveedor_singleSelect, Especialidad_singleSelect).
+        /// </summary>
+        public string CamposConsultaRegistroDestino { get; set; }
 
         /// <summary>Tipo de trabajo: FileExtraction, ProjectSync, FullExtraction. Viene del campo Tipo de la tabla Trabajos.</summary>
         public string TipoTrabajo { get; set; }
@@ -106,6 +127,13 @@ namespace SigmabotSync.Domain.Entities
         public List<string> ToReturnFields()
         {
             var list = ParseStringArray(CamposConsulta);
+            return list ?? new List<string>();
+        }
+
+        /// <summary>returnFields para register/search del destino (supersede SALFA→Codelco).</summary>
+        public List<string> ToReturnFieldsRegistroDestino()
+        {
+            var list = ParseStringArray(CamposConsultaRegistroDestino);
             return list ?? new List<string>();
         }
 

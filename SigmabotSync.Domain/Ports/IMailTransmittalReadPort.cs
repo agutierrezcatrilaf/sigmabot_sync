@@ -10,6 +10,7 @@ namespace SigmabotSync.Domain.Ports
     public interface IMailTransmittalReadPort
     {
         /// <param name="mailbox">inbox o sentbox.</param>
+        /// <param name="corrTypeId">Filtro Aconex corrtypeid (ej. 23 transmisión Codelco, 400 respuesta SALFA).</param>
         Task<IReadOnlyList<TransmittalMailSummary>> ListTransmittalsAsync(
             string baseUrl,
             string projectId,
@@ -17,6 +18,7 @@ namespace SigmabotSync.Domain.Ports
             DateTime desdeUtc,
             DateTime hastaUtc,
             string mailbox,
+            int corrTypeId = 23,
             CancellationToken cancellationToken = default);
 
         Task<TransmittalMailDetail> GetTransmittalDetailAsync(

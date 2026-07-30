@@ -9,12 +9,13 @@ using SigmabotSync.Domain.Ports;
 
 namespace SigmabotSync.Infrastructure.External
 {
-    /// <summary>List Mail (inbox/sentbox, corrtypeid:23) + View Mail Metadata para ProjectSync.</summary>
+    /// <summary>List Mail (inbox/sentbox, corrtypeid configurable) + View Mail Metadata para ProjectSync.</summary>
     public sealed class AconexMailTransmittalAdapter : IMailTransmittalReadPort
     {
         private const string MailContentType = "application/vnd.aconex.mail.v3+xml";
         private const string LegacyMailApplicationKey = "a7f7bf46-a848-4b7a-ae8c-ed55b3952010";
         private const int PageSize = 300;
+        private const int DefaultCorrTypeId = 23;
 
         private readonly IAconexHttpGetPort _httpGet;
 
@@ -30,14 +31,16 @@ namespace SigmabotSync.Infrastructure.External
             DateTime desdeUtc,
             DateTime hastaUtc,
             string mailbox,
+            int corrTypeId = DefaultCorrTypeId,
             CancellationToken cancellationToken = default)
         {
             string mailBox = string.IsNullOrWhiteSpace(mailbox) ? "inbox" : mailbox.Trim().ToLowerInvariant();
+            int corrId = corrTypeId > 0 ? corrTypeId : DefaultCorrTypeId;
             string root = NormalizeBaseUrl(baseUrl);
             string fechaInicio = desdeUtc.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
             string fechaFin = hastaUtc.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-            long totalPages = await GetTotalPagesAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, cancellationToken)
+            long totalPages = await GetTotalPagesAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, corrId, cancellationToken)
                 .ConfigureAwait(false);
             if (totalPages <= 0)
                 return Array.Empty<TransmittalMailSummary>();
@@ -45,7 +48,7 @@ namespace SigmabotSync.Infrastructure.External
             var results = new List<TransmittalMailSummary>();
             for (long page = 1; page <= totalPages; page++)
             {
-                string pageXml = await GetPageXmlAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, page, cancellationToken)
+                string pageXml = await GetPageXmlAsync(root, projectId, authorizationHeaderBase64, fechaInicio, fechaFin, mailBox, corrId, page, cancellationToken)
                     .ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(pageXml))
                     continue;
@@ -85,9 +88,10 @@ namespace SigmabotSync.Infrastructure.External
             string fechaInicio,
             string fechaFin,
             string mailbox,
+            int corrTypeId,
             CancellationToken cancellationToken)
         {
-            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, pageNumber: null);
+            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, corrTypeId, pageNumber: null);
             string responseXml = await _httpGet.GetStringAsync(new AconexHttpGetRequest
             {
                 Url = url,
@@ -117,10 +121,11 @@ namespace SigmabotSync.Infrastructure.External
             string fechaInicio,
             string fechaFin,
             string mailbox,
+            int corrTypeId,
             long pageNumber,
             CancellationToken cancellationToken)
         {
-            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, pageNumber);
+            string url = BuildListMailUrl(root, projectId, fechaInicio, fechaFin, mailbox, corrTypeId, pageNumber);
             return _httpGet.GetStringAsync(new AconexHttpGetRequest
             {
                 Url = url,
@@ -131,14 +136,15 @@ namespace SigmabotSync.Infrastructure.External
             }, cancellationToken);
         }
 
-        private static string BuildListMailUrl(string root, string projectId, string fechaInicio, string fechaFin, string mailbox, long? pageNumber)
+        private static string BuildListMailUrl(string root, string projectId, string fechaInicio, string fechaFin, string mailbox, int corrTypeId, long? pageNumber)
         {
             string mailBox = string.IsNullOrWhiteSpace(mailbox) ? "inbox" : mailbox.Trim().ToLowerInvariant();
+            int corrId = corrTypeId > 0 ? corrTypeId : DefaultCorrTypeId;
             string url = $"{root}/api/projects/{projectId}/mail?mail_box={mailBox}" +
                          "&return_fields=docno,sentdate,subject,fromUserDetails,inreftomailno,corrtypeid,hasAttachments" +
                          "&page_size=" + PageSize +
                          "&search_type=PAGED" +
-                         $"&search_query=corrtypeid:23 AND sentdate:[{fechaInicio} TO {fechaFin}]";
+                         $"&search_query=corrtypeid:{corrId} AND sentdate:[{fechaInicio} TO {fechaFin}]";
             if (pageNumber.HasValue)
                 url += "&page_number=" + pageNumber.Value;
             return url;

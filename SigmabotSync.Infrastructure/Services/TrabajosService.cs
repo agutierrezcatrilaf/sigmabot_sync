@@ -104,6 +104,9 @@ namespace SigmabotSync.Infrastructure.Services
                                     if (int.TryParse(valor, out int diasLookback) && diasLookback > 0)
                                         result.DiasLookbackTransmittal = diasLookback;
                                     break;
+                                case "CodigoProyectoSalfa":
+                                    result.CodigoProyectoSalfa = valor;
+                                    break;
                                 case "CamposConsulta":
                                     result.CamposConsulta = valor;
                                     break;
@@ -129,6 +132,15 @@ namespace SigmabotSync.Infrastructure.Services
                                 case "CredencialBD":
                                     if (int.TryParse(valor, out int idBd))
                                         result.CredencialBDId = idBd;
+                                    break;
+                                case "IdEstatusDocumentoDestino":
+                                    result.IdEstatusDocumentoDestino = valor;
+                                    break;
+                                case "SubjectFiltroTransmittalVuelta":
+                                    result.SubjectFiltroTransmittalVuelta = valor;
+                                    break;
+                                case "CamposConsultaRegistroDestino":
+                                    result.CamposConsultaRegistroDestino = valor;
                                     break;
                             }
                         }

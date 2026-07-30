@@ -13,9 +13,10 @@ BEGIN
         IdTrabajo            INT             NOT NULL,
         ACXProjectIdOrigen   NVARCHAR(50)    NOT NULL,
         ACXProjectIdDestino  NVARCHAR(50)    NOT NULL,
-        Tipo                 NVARCHAR(50)    NOT NULL,  -- Discipline | TipoDocumento
+        Tipo                 NVARCHAR(50)    NOT NULL,  -- Discipline | TipoDocumento | Cwa
         ValorOrigen          NVARCHAR(200)   NOT NULL,
         ValorDestino         NVARCHAR(200)   NOT NULL,
+        CodigoDestino        NVARCHAR(50)    NOT NULL,
         Activo               BIT             NOT NULL CONSTRAINT DF_TransmittalSyncEquivalencia_Activo DEFAULT (1),
         UpdatedAt            DATETIME2       NOT NULL CONSTRAINT DF_TransmittalSyncEquivalencia_UpdatedAt DEFAULT (SYSUTCDATETIME())
     );
@@ -50,11 +51,12 @@ IF NOT EXISTS (
       AND ValorOrigen = N'INDCP - INFORME DIARIO (SOLO PARA ESPECIALIDAD CP)')
 BEGIN
     INSERT INTO TransmittalSyncEquivalencia
-        (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Tipo, ValorOrigen, ValorDestino)
+        (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Tipo, ValorOrigen, ValorDestino, CodigoDestino)
     VALUES
     (@IdTrabajo, @Codelco, @Salfa, 'TipoDocumento',
      N'INDCP - INFORME DIARIO (SOLO PARA ESPECIALIDAD CP)',
-     N'IAD-Informe de Avance Diario');
+     N'IAD-Informe de Avance Diario',
+     N'IAD');
 END
 
 PRINT 'TransmittalSyncEquivalencia: seed mínimo TipoDocumento listo.';

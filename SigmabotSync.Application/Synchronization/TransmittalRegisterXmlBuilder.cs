@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using SigmabotSync.Application.FileExtraction;
+using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
 using SigmabotSync.Domain.Models.Synchronization;
 
@@ -109,6 +111,9 @@ namespace SigmabotSync.Application.Synchronization
             string revision,
             bool hasFile,
             IReadOnlyDictionary<string, string> sourceHints,
+            string fixedDocumentStatusId,
+            bool omitDocumentNumber,
+            string codigoProyectoSalfa,
             out string error)
         {
             error = null;
@@ -128,39 +133,76 @@ namespace SigmabotSync.Application.Synchronization
                 if (map == null || string.IsNullOrWhiteSpace(map.CampoDestino))
                     continue;
 
-                string destino = map.CampoDestino.Trim();
+                string destino = ResolveDestinoIdentifier(targetSchema, map.CampoDestino.Trim());
                 if (emitted.Contains(destino))
                     continue;
+                if (omitDocumentNumber && IsDocumentNumberField(destino))
+                    continue;
 
-                string value = ResolveOrigenValue(map.CampoOrigen, attachment, revision, sourceHints);
+                string value = ResolveMappingOrigenValue(
+                    map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog, codigoProyectoSalfa);
+
+                if (string.IsNullOrWhiteSpace(value)
+                    && IsEquivalenciaCatalog(map.Catalogo)
+                    && attachment != null
+                    && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                        attachment.DocumentNo, out string wbsInfer, out string tipoInfer, out _))
+                {
+                    if (string.Equals(map.Catalogo, AconexDocumentCatalogNames.EquivalenciaCwa, StringComparison.OrdinalIgnoreCase))
+                        value = documentCatalog?.ResolveEquivalenciaCwaByWbsCode(wbsInfer);
+                    else if (string.Equals(map.Catalogo, AconexDocumentCatalogNames.EquivalenciaTipoDocumento, StringComparison.OrdinalIgnoreCase))
+                        value = documentCatalog?.ResolveByCatalog(map.Catalogo, tipoInfer);
+                    else if (string.Equals(map.Catalogo, AconexDocumentCatalogNames.EquivalenciaDiscipline, StringComparison.OrdinalIgnoreCase))
+                        value = documentCatalog?.ResolveByCatalog(
+                            map.Catalogo, "MD - MULTIDISCIPLINA");
+                }
+
                 if (string.IsNullOrWhiteSpace(value))
                     value = ApplyValorDefault(map.ValorDefault, hasFile, attachment, revision);
 
+                if (!string.IsNullOrWhiteSpace(map.Catalogo) && !string.IsNullOrWhiteSpace(value))
+                {
+                    string resolved = documentCatalog?.ResolveByCatalog(map.Catalogo, value);
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                        value = resolved;
+                }
+
                 value = ResolveCustomFieldValueForRegister(destino, value, map.EsObligatorio, picklists);
+
+                if (string.Equals(destino, "TipoDeDocumento_singleSelect", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(value)
+                    && !LooksLikeAconexPicklistId(value))
+                {
+                    string codeOnly = value.Split('-')[0].Trim();
+                    if (TryResolvePicklistId(picklists, destino, codeOnly, out string byCode))
+                        value = byCode;
+                }
 
                 if (string.IsNullOrWhiteSpace(value))
                 {
                     if (map.EsObligatorio)
                     {
-                        error = $"Campo obligatorio destino '{destino}' sin valor (origen '{map.CampoOrigen}').";
+                        string origenLabel = map.CampoOrigen;
+                        if (ProjectSyncCampoOrigenTokens.IsSalfaDocumentNumberFromCodelco(map.CampoOrigen))
+                        {
+                            string codelcoDocNo = attachment?.DocumentNo?.Trim();
+                            ProjectSyncSalfaDocumentNumberBuilder.Build(
+                                codigoProyectoSalfa, documentCatalog, codelcoDocNo, sourceHints, out string docnoErr);
+                            if (!string.IsNullOrWhiteSpace(docnoErr))
+                                origenLabel = map.CampoOrigen + " (" + docnoErr + ")";
+                        }
+                        error = $"Campo obligatorio destino '{destino}' sin valor (origen '{origenLabel}').";
                         return null;
                     }
                     continue;
                 }
 
-                if (!string.IsNullOrWhiteSpace(map.Catalogo))
+                if (!string.IsNullOrWhiteSpace(map.Catalogo) && !IsEquivalenciaCatalog(map.Catalogo))
                 {
                     string resolved = documentCatalog?.ResolveByCatalog(map.Catalogo, value);
                     if (!string.IsNullOrWhiteSpace(resolved))
                     {
                         value = resolved;
-                    }
-                    else if (IsEquivalenciaCatalog(map.Catalogo) && !string.IsNullOrWhiteSpace(map.ValorDefault))
-                    {
-                        // Origen sin fila de equivalencia → usar default destino (ej. General / IAD).
-                        string fallback = ApplyValorDefault(map.ValorDefault, hasFile, attachment, revision);
-                        if (!string.IsNullOrWhiteSpace(fallback))
-                            value = fallback;
                     }
                 }
 
@@ -178,6 +220,293 @@ namespace SigmabotSync.Application.Synchronization
 
             sb.Append("</Document>");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Supersede: base = estado actual en destino (Codelco); solo se sobreescriben campos actualizables (rev, estatus, fecha, archivo).
+        /// </summary>
+        public static string BuildSupersedeFromFieldMappings(
+            IReadOnlyList<TransmittalSyncCampoMapeoItem> mappings,
+            AconexRegisterSchemaSnapshot targetSchema,
+            AconexDocumentCatalog documentCatalog,
+            TransmittalDocumentAttachment attachment,
+            string revision,
+            bool hasFile,
+            IReadOnlyDictionary<string, string> sourceHints,
+            IReadOnlyDictionary<string, string> targetHints,
+            string fixedDocumentStatusId,
+            out string error)
+        {
+            error = null;
+            if (targetSchema?.Fields == null || targetSchema.Fields.Count == 0)
+            {
+                error = "Schema de registro destino vacío.";
+                return null;
+            }
+            if (targetHints == null || targetHints.Count == 0)
+            {
+                error = "Sin datos del documento existente en destino (register/search).";
+                return null;
+            }
+
+            var picklists = targetSchema.PicklistsByIdentifier ?? EmptyPicklists();
+            var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in targetHints)
+            {
+                if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                    merged[kv.Key.Trim()] = kv.Value.Trim();
+            }
+
+            if (mappings != null)
+            {
+                foreach (TransmittalSyncCampoMapeoItem map in mappings)
+                {
+                    if (map == null || string.IsNullOrWhiteSpace(map.CampoDestino))
+                        continue;
+                    string destino = ResolveDestinoIdentifier(targetSchema, map.CampoDestino.Trim());
+                    if (!IsSupersedeUpdatableField(destino))
+                        continue;
+
+                    string value = ResolveMappingOrigenValue(
+                        map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog, null);
+                    if (string.IsNullOrWhiteSpace(value))
+                        value = ApplyValorDefault(map.ValorDefault, hasFile, attachment, revision);
+                    if (string.IsNullOrWhiteSpace(value))
+                        continue;
+
+                    value = ResolveCustomFieldValueForRegister(destino, value, map.EsObligatorio, picklists);
+                    if (!string.IsNullOrWhiteSpace(map.Catalogo))
+                    {
+                        string resolved = documentCatalog?.ResolveByCatalog(map.Catalogo, value);
+                        if (!string.IsNullOrWhiteSpace(resolved))
+                            value = resolved;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(value))
+                        merged[destino] = value.Trim();
+                }
+            }
+
+            merged["Revision"] = string.IsNullOrWhiteSpace(revision) ? "A" : revision.Trim();
+            merged["HasFile"] = hasFile ? "true" : "false";
+            if (!string.IsNullOrWhiteSpace(fixedDocumentStatusId))
+            {
+                merged["DocumentStatusId"] = fixedDocumentStatusId.Trim();
+                merged["statusid"] = fixedDocumentStatusId.Trim();
+            }
+
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sb = new StringBuilder();
+            sb.Append("<Document>");
+
+            foreach (AconexRegisterSchemaField field in targetSchema.Fields)
+            {
+                if (field == null || string.IsNullOrWhiteSpace(field.Identifier))
+                    continue;
+
+                string destino = field.Identifier.Trim();
+                if (emitted.Contains(destino))
+                    continue;
+                if (string.Equals(destino, "id", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!ShouldEmitIdentifier(destino))
+                    continue;
+                if (IsDocumentNumberField(destino))
+                    continue;
+
+                bool isMandatory = string.Equals(field.MandatoryStatus, "MANDATORY", StringComparison.OrdinalIgnoreCase);
+                if (!isMandatory && !string.Equals(destino, "HasFile", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!merged.ContainsKey(destino))
+                        continue;
+                }
+
+                if (!TryResolveMergedFieldValue(merged, destino, field.DataType, picklists, documentCatalog, out string value))
+                {
+                    if (isMandatory)
+                    {
+                        error = $"Campo obligatorio destino '{destino}' sin valor en documento Codelco (register/search).";
+                        return null;
+                    }
+                    continue;
+                }
+
+                sb.Append("<").Append(destino).Append(">").Append(EscapeXml(value)).Append("</").Append(destino).Append(">");
+                emitted.Add(destino);
+            }
+
+            if (!emitted.Contains("HasFile"))
+            {
+                sb.Append("<HasFile>").Append(hasFile ? "true" : "false").Append("</HasFile>");
+                emitted.Add("HasFile");
+            }
+
+            // Project fields leídos del destino (no se modifican; Aconex los exige en supersede).
+            foreach (KeyValuePair<string, string> kv in merged.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value))
+                    continue;
+                string destino = ResolveDestinoIdentifier(targetSchema, kv.Key.Trim()) ?? kv.Key.Trim();
+                if (emitted.Contains(destino) || IsDocumentNumberField(destino))
+                    continue;
+                if (!IsPlaceholderCustomField(destino))
+                    continue;
+
+                string value = ResolveCustomFieldValueForRegister(destino, kv.Value.Trim(), esObligatorio: true, picklists) ?? kv.Value.Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                sb.Append("<").Append(destino).Append(">").Append(EscapeXml(value)).Append("</").Append(destino).Append(">");
+                emitted.Add(destino);
+            }
+
+            sb.Append("</Document>");
+            return sb.ToString();
+        }
+
+        private static bool IsSupersedeUpdatableField(string destino)
+        {
+            if (string.IsNullOrWhiteSpace(destino))
+                return false;
+            switch (destino.Trim())
+            {
+                case "Revision":
+                case "DocumentStatusId":
+                case "statusid":
+                case "RevisionDate":
+                case "revisiondate":
+                case "HasFile":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryResolveMergedFieldValue(
+            IReadOnlyDictionary<string, string> merged,
+            string destino,
+            string dataType,
+            IReadOnlyDictionary<string, IReadOnlyList<AconexSchemaValueOption>> picklists,
+            AconexDocumentCatalog documentCatalog,
+            out string value)
+        {
+            value = GetMergedHint(merged, destino);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                switch (destino.ToLowerInvariant())
+                {
+                    case "documenttypeid":
+                        value = GetMergedHint(merged, "doctype", "DocumentType", "documentType", "DocumentTypeId");
+                        break;
+                    case "documentstatusid":
+                        value = GetMergedHint(merged, "statusid", "DocumentStatus", "documentStatus", "DocumentStatusId");
+                        break;
+                    case "revisiondate":
+                        value = GetMergedHint(merged, "revisiondate", "RevisionDate");
+                        break;
+                    case "author":
+                        value = GetMergedHint(merged, "author", "Author");
+                        break;
+                    case "reviewstatusid":
+                        value = GetMergedHint(merged, "reviewstatus", "ReviewStatusId", "reviewStatus");
+                        break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                value = null;
+                return false;
+            }
+
+            value = value.Trim();
+            if (IsDateField(destino, dataType))
+                value = FormatDateForAconex(value) ?? value;
+            else if (string.Equals(destino, "DocumentTypeId", StringComparison.OrdinalIgnoreCase))
+            {
+                string picklistId = ResolvePicklistId(picklists, destino, value, null);
+                if (string.IsNullOrWhiteSpace(picklistId))
+                    picklistId = documentCatalog?.ResolveByCatalog(AconexDocumentCatalogNames.TiposDocumentos, value);
+                if (!string.IsNullOrWhiteSpace(picklistId))
+                    value = picklistId;
+            }
+            else if (string.Equals(destino, "DocumentStatusId", StringComparison.OrdinalIgnoreCase))
+            {
+                string picklistId = ResolvePicklistId(picklists, destino, value, null);
+                if (string.IsNullOrWhiteSpace(picklistId))
+                    picklistId = documentCatalog?.ResolveByCatalog(AconexDocumentCatalogNames.EstatusDocumentos, value);
+                if (!string.IsNullOrWhiteSpace(picklistId))
+                    value = picklistId;
+            }
+            else if (IsPlaceholderCustomField(destino) || (picklists != null && picklists.ContainsKey(destino)))
+                value = ResolveCustomFieldValueForRegister(destino, value, esObligatorio: true, picklists) ?? value;
+
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private static string GetMergedHint(IReadOnlyDictionary<string, string> merged, params string[] keys)
+        {
+            if (merged == null || keys == null)
+                return null;
+            foreach (string key in keys)
+            {
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+                if (merged.TryGetValue(key.Trim(), out string v) && !string.IsNullOrWhiteSpace(v))
+                    return v.Trim();
+            }
+            return null;
+        }
+
+        private static string ResolveMappingOrigenValue(
+            TransmittalSyncCampoMapeoItem map,
+            TransmittalDocumentAttachment attachment,
+            string revision,
+            IReadOnlyDictionary<string, string> sourceHints,
+            string fixedDocumentStatusId,
+            AconexDocumentCatalog documentCatalog,
+            string codigoProyectoSalfa)
+        {
+            if (map != null && ProjectSyncCampoOrigenTokens.IsIdEstatusDocumentoDestino(map.CampoOrigen))
+                return fixedDocumentStatusId;
+
+            if (map != null && ProjectSyncCampoOrigenTokens.IsDocumentTypeFromTipoDocumento(map.CampoOrigen))
+            {
+                string tipoDeDocumento = GetHint(sourceHints, "TipoDeDocumento_singleSelect");
+                if (string.IsNullOrWhiteSpace(tipoDeDocumento))
+                    tipoDeDocumento = GetHint(sourceHints, "doctype", "DocumentType");
+                if (string.IsNullOrWhiteSpace(tipoDeDocumento) && attachment != null
+                    && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                        attachment.DocumentNo, out _, out string tipoFromDocno, out _))
+                    tipoDeDocumento = tipoFromDocno;
+                return ProjectSyncDocumentTypeResolver.ResolveSalfaDocumentTypeName(tipoDeDocumento);
+            }
+
+            if (map != null && ProjectSyncCampoOrigenTokens.IsSalfaDocumentNumberFromCodelco(map.CampoOrigen))
+            {
+                string codelcoDocNo = attachment?.DocumentNo?.Trim();
+                if (string.IsNullOrWhiteSpace(codelcoDocNo))
+                    codelcoDocNo = GetHint(sourceHints, "DocumentNumber", "docno");
+
+                string docnoError;
+                string salfaDocNo = ProjectSyncSalfaDocumentNumberBuilder.Build(
+                    codigoProyectoSalfa, documentCatalog, codelcoDocNo, sourceHints, out docnoError);
+                if (!string.IsNullOrWhiteSpace(salfaDocNo))
+                    return salfaDocNo;
+                if (!string.IsNullOrWhiteSpace(docnoError))
+                    return null; // error surfaced by caller when obligatorio
+                return null;
+            }
+
+            string fromOrigen = ResolveOrigenValue(map?.CampoOrigen, attachment, revision, sourceHints);
+            if (string.IsNullOrWhiteSpace(fromOrigen)
+                && map != null
+                && string.Equals(map.CampoOrigen?.Trim(), "TipoDeDocumento_singleSelect", StringComparison.OrdinalIgnoreCase)
+                && attachment != null
+                && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                    attachment.DocumentNo, out _, out string tipoOrigenInfer, out _))
+                fromOrigen = tipoOrigenInfer;
+            return fromOrigen;
         }
 
         /// <summary>
@@ -239,7 +568,8 @@ namespace SigmabotSync.Application.Synchronization
             if (string.IsNullOrWhiteSpace(catalogo))
                 return false;
             return string.Equals(catalogo, AconexDocumentCatalogNames.EquivalenciaDiscipline, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(catalogo, AconexDocumentCatalogNames.EquivalenciaTipoDocumento, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(catalogo, AconexDocumentCatalogNames.EquivalenciaTipoDocumento, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(catalogo, AconexDocumentCatalogNames.EquivalenciaCwa, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -272,6 +602,47 @@ namespace SigmabotSync.Application.Synchronization
 
             // TBD / valores de texto son válidos en picklists SALFA configurados en Project Fields.
             return trimmed;
+        }
+
+        private static string ResolveDestinoIdentifier(AconexRegisterSchemaSnapshot targetSchema, string campoDestino)
+        {
+            if (string.IsNullOrWhiteSpace(campoDestino))
+                return campoDestino;
+
+            string trimmed = campoDestino.Trim();
+            string fromSchema = FindSchemaFieldIdentifier(targetSchema, trimmed);
+            if (!string.IsNullOrWhiteSpace(fromSchema))
+                return fromSchema;
+
+            // Alias frecuentes Codelco ↔ nombres estándar Aconex en homologación.
+            switch (trimmed.ToLowerInvariant())
+            {
+                case "statusid":
+                    return FindSchemaFieldIdentifier(targetSchema, "DocumentStatusId") ?? trimmed;
+                case "doctype":
+                    return FindSchemaFieldIdentifier(targetSchema, "DocumentTypeId") ?? trimmed;
+                case "author":
+                    return FindSchemaFieldIdentifier(targetSchema, "Author") ?? trimmed;
+                case "revisiondate":
+                    return FindSchemaFieldIdentifier(targetSchema, "RevisionDate") ?? trimmed;
+                default:
+                    return trimmed;
+            }
+        }
+
+        private static string FindSchemaFieldIdentifier(AconexRegisterSchemaSnapshot targetSchema, string identifier)
+        {
+            if (targetSchema?.Fields == null || string.IsNullOrWhiteSpace(identifier))
+                return null;
+
+            foreach (AconexRegisterSchemaField field in targetSchema.Fields)
+            {
+                if (field != null &&
+                    string.Equals(field.Identifier, identifier.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return field.Identifier.Trim();
+            }
+
+            return null;
         }
 
         private static string ResolveOrigenValue(
@@ -320,17 +691,26 @@ namespace SigmabotSync.Application.Synchronization
             {
                 case "doctype":
                     return new[] { "doctype", "DocumentType", "DocumentTypeId" };
+                case "DocumentTypeId":
+                    return new[] { "DocumentTypeId", "doctype", "DocumentType" };
                 case "revisiondate":
                     return new[] { "revisiondate", "RevisionDate", "revisionDate" };
                 case "Status":
                 case "statusid":
                     return new[] { "statusid", "Status", "DocumentStatus", "DocumentStatusId" };
+                case "DocumentStatusId":
+                    return new[] { "DocumentStatusId", "statusid", "Status", "DocumentStatus" };
                 case "author":
                     return new[] { "author", "Author" };
                 case "Especialidad_singleSelect":
                     return new[] { "Especialidad_singleSelect", "Discipline_singleSelect", "discipline" };
                 case "TipoDeDocumento_singleSelect":
                     return new[] { "TipoDeDocumento_singleSelect" };
+                case "MailNo":
+                case "mailno":
+                    return new[] { "MailNo", "mailno", "ReferenceNumber" };
+                case "CdigoCodelco_singleLineText":
+                    return new[] { "CdigoCodelco_singleLineText" };
                 default:
                     return new[] { campoOrigen.Trim() };
             }
@@ -587,7 +967,42 @@ namespace SigmabotSync.Application.Synchronization
                 }
             }
 
+            string trimmedPrefix = trimmed.Split('-')[0].Trim();
+            foreach (AconexSchemaValueOption option in options)
+            {
+                if (option == null || string.IsNullOrWhiteSpace(option.Value))
+                    continue;
+                string optionValue = option.Value.Trim();
+                if (optionValue.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase)
+                    || trimmed.StartsWith(optionValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    aconexId = option.Id?.Trim();
+                    if (!string.IsNullOrWhiteSpace(aconexId))
+                        return true;
+                }
+                string optionPrefix = optionValue.Split('-')[0].Trim();
+                if (!string.IsNullOrWhiteSpace(trimmedPrefix)
+                    && string.Equals(trimmedPrefix, optionPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    aconexId = option.Id?.Trim();
+                    if (!string.IsNullOrWhiteSpace(aconexId))
+                        return true;
+                }
+            }
+
             return false;
+        }
+
+        private static bool LooksLikeAconexPicklistId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+            foreach (char c in value.Trim())
+            {
+                if (!char.IsDigit(c))
+                    return false;
+            }
+            return value.Trim().Length >= 8;
         }
 
         private static string GetHint(IReadOnlyDictionary<string, string> sourceValues, params string[] keys)
@@ -602,6 +1017,12 @@ namespace SigmabotSync.Application.Synchronization
                     return value.Trim();
             }
             return null;
+        }
+
+        private static bool IsDocumentNumberField(string identifier)
+        {
+            return string.Equals(identifier, "DocumentNumber", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(identifier, "docno", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool ShouldEmitIdentifier(string identifier)

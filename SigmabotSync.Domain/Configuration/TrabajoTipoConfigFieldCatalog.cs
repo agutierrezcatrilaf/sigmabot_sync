@@ -47,6 +47,35 @@ namespace SigmabotSync.Domain.Configuration
                 ayuda: "Días hacia atrás para buscar transmitals en inbox del origen. Default 30."),
 
             new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.CodigoProyectoSalfa,
+                "Código proyecto SALFA (docno)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Primer segmento del DocumentNumber en SALFA al registrar desde Codelco (ej. 10031671). Distinto del N° contrato Codelco."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.IdEstatusDocumentoDestino,
+                "Estatus documento destino (idEstatus, Codelco)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "idEstatus al supersede/register en Codelco (ej. 1207959768 = Emitido para Revisión). " +
+                        "En homologación vuelta, fila statusid: Campo origen = " + ProjectSyncCampoOrigenTokens.IdEstatusDocumentoDestino + "."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.SubjectFiltroTransmittalVuelta,
+                "Filtro subject transmittal (vuelta)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "Solo en vuelta SALFA→Codelco (sentbox lado 2). Procesa transmitals cuyo Subject contenga este texto (ej. Final). Vacío = sin filtro."),
+
+            new TrabajoConfiguracionCampoDefinicion(
+                TrabajosConfiguracionKeyNames.CamposConsultaRegistroDestino,
+                "Campos register/search destino (CSV)",
+                tiposDondeVisible: new[] { TipoTrabajoIds.ProjectSync },
+                tiposDondeObligatorio: Array.Empty<string>(),
+                ayuda: "returnFields para leer el documento en Codelco antes de supersede (project fields). CSV o JSON. Ej: Proveedor_singleSelect, Especialidad_singleSelect, TipoDeDocumento_singleSelect. Se unen con schema y homologación."),
+
+            new TrabajoConfiguracionCampoDefinicion(
                 TrabajosConfiguracionKeyNames.CredencialAconex,
                 "Id credencial Aconex",
                 tiposDondeVisible: new[] { TipoTrabajoIds.FileExtraction, TipoTrabajoIds.FullExtraction, TipoTrabajoIds.FileUploadWithMetadata, TipoTrabajoIds.ProjectSync },

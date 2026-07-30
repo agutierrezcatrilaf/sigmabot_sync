@@ -1,0 +1,109 @@
+---
+description: Contexto integración Salfa (SSO Autorizador, estándares, despliegue) para SigmabotSync/SigmabotConfig
+alwaysApply: true
+---
+
+# Integración Salfa – contexto del proyecto
+
+## Repositorios (no confundir)
+
+- **SigmabotSync** (`SigmabotSync/`): solución .NET 8 — consola batch, `SigmabotConfig.Api`, dominio/infra.
+- **SigmabotConfig** (`../SigmabotConfig/`): front **Angular 19** standalone + Material. Consume la API. `config.json` → `apiBaseUrl`.
+- Blazor `ConfigWeb` existe pero el front oficial para Salfa es **Angular** en `SigmabotConfig`.
+
+## Despliegue IIS (confirmado 2026-07)
+
+### QA
+- Servidor: **QAAPP06** (IP `172.20.1.102`)
+- Runner Tag GitLab: **QAAPP06**
+- URL front: `https://configsigmabotqa.salfagestion.cl`
+- Ruta IIS: `E:\inetpub\wwwroot\configsigmabot`
+- Site / App Pool: **configsigmabot**
+
+### Producción
+- Servidor: **PRAPP06** (IP `172.20.1.199`)
+- Runner Tag GitLab: **PRAPP06**
+- URL front: `https://configsigmabot.salfagestion.cl`
+- Ruta IIS: `E:\inetpub\wwwroot\configsigmabot`
+- Site / App Pool: **configsigmabot**
+
+> El correo cubre el **sitio del front Angular**. Confirmar con Salfa dónde vive `SigmabotConfig.Api` (mismo IIS, otro site, o host distinto) y la URL pública de la API en QA/Prod.
+
+## Autorizador (alta confirmada)
+
+- **ClientId:** `f0440013f0afbb81ffddd01b4197ff`
+- **Client Secret:** guardado fuera del repo (correo Salfa). Usar solo en backend / secretos de pipeline; **no** en el front Angular ni en git.
+- **Scopes:** `comunes-api`, `email`, `openid`, `console-api`, `sigmabotconfig-api`
+- **Grant types:** `client_credentials`, `authorization_code`
+- Recurso/audience esperado para validación API: **`sigmabotconfig-api`**
+
+### URLs de retorno (callback)
+- QA: `https://configsigmabotqa.salfagestion.cl/callback`
+- Prod: `https://configsigmabot.salfagestion.cl/callback`
+- Local: `http://localhost:4200/callback`
+
+### URLs de login / logout
+- QA: `https://configsigmabotqa.salfagestion.cl/login`
+- Prod: `https://configsigmabot.salfagestion.cl/login`
+- Local: `http://localhost:4200/login`
+
+### Endpoints Autorizador (oficiales en guías adjuntas)
+| Ambiente | API Autorizador | Middleware Identity | Estado app SigmaBot |
+|----------|-----------------|---------------------|---------------------|
+| QA | `https://apiautorizadorqa.salfagestion.cl/api/v1.0` | `https://middlewareautorizadorqa.salfagestion.cl` | **No configurado** (Salfa 2026-07: error *"La aplicacion no se reconoce"*) |
+| Prod | `https://autorizadorapi.salfagestion.cl/api/v1.0` | `https://autorizadormiddleware.salfagestion.cl` | **Usar para pruebas SSO** hasta que den de alta QA |
+
+> Salfa indicó probar contra **Prod** (`autorizadorapi.salfagestion.cl`); la ruta base es `/api` pero los endpoints usan `/api/v1.0/...`.
+
+- Flujo front (vía API wrapper, no Identity directo): `POST /token/iniciarLogin` → redirect → `/callback?code=` → `POST /token/obtenerToken` → `sessionStorage` → Bearer.
+- Logout: `POST /token/cerrarSesion` con `id_token` + `logoutUrl` → redirect a URL texto plano.
+- Front opcional: `GET /user/validarAccesoToken/{clientId}`.
+- Backend (enfoque **nuevo** recomendado): token en header + `GET /user/validarRecursoToken/{recurso}` con recurso `sigmabotconfig-api`.
+- Enfoque antiguo: JWT Bearer + NuGet `XMSBS.Autorizador` + `AuthFilter` (menos preferido).
+
+### Guías adjuntas del correo
+Carpeta: `Downloads/RV_ Sitios para Aplicación SigmaBot/`
+- `guia_integracion_frontend.md` — SPA (incluye Angular standalone: interceptor + guard + servicio)
+- `guia_integracion_externos.md` — OAuth puro Identity (authorization_code / client_credentials); secret solo backend
+- PDFs: Integración V2 Angular, Lógica, Modelos, Métodos y Definiciones
+- `ArchivosAutorizador.7z` — ejemplos NgModule + `AuthFilter.cs`
+- Adaptar a Angular 19 **standalone** en `SigmabotConfig`.
+
+## Estado SSO
+
+- Front `SigmabotConfig`: SSO implementado (`/login`, `/callback`, guard, interceptor, logout). Config en `config.json` → `auth`.
+- API `SigmabotConfig.Api`: `AuthFilter` + `validarRecursoToken` (recurso `sigmabotconfig-api`). Flag `Autorizador:Enabled` (local default `false`).
+- Consola batch: probablemente **fuera de SSO** (confirmar con Salfa).
+
+### Probar sin IIS (local)
+1. Front: `ng serve` en SigmabotConfig — con `auth.enabled=true` apuntar `urlApiAutorizador` a **Prod** (QA no tiene la app).
+2. `returnUrl`: `http://localhost:4200/callback` (confirmar que está registrada en Autorizador Prod).
+3. Para trabajar sin login: `auth.enabled: false` en `src/assets/config.json`.
+4. API local: al probar SSO end-to-end, `Autorizador:UrlApi` también debe ser Prod y `Enabled=true` (el token sale del mismo ambiente).
+
+## Pendiente con Salfa / interno
+
+1. Acceso **GitLab** corporativo + pipeline (tags `QAAPP06` / `PRAPP06`).
+2. URL y site IIS de **SigmabotConfig.Api** en QA/Prod.
+3. ¿.NET 8 y Angular Material OK? ¿Consola sin SSO? (URL Autorizador Prod ya documentada en guías.)
+4. Despliegue: correo a `despliegues_prod@salfacloud.cl` cuando corresponda; runner en Paused hasta autorización.
+
+## Estándares Salfa (manual 2026.1) – brechas
+
+| Requisito | Actual |
+|-----------|--------|
+| Angular 18+ | Angular 19 ✓ |
+| PrimeNG + Tailwind | Angular Material (negociar) |
+| .NET 10+ | .NET 8 (negociar) |
+| SSO obligatorio | Credenciales listas; código pendiente |
+| GitLab + sin solo binarios | Repo local aún |
+| packages.lock + SAST | Ya alineado en SigmabotSync |
+
+## Próximo trabajo técnico
+
+1. ~~Integrar SSO en `SigmabotConfig`~~ ✓
+2. ~~Proteger `SigmabotConfig.Api` con validación de recurso~~ ✓ (`Autorizador:Enabled`)
+3. Pipeline GitLab: build Angular → publish a `E:\inetpub\wwwroot\configsigmabot` con tags QAAPP06/PRAPP06.
+4. Consola: confirmar exclusión SSO.
+5. Pruebas locales del login contra Autorizador **Prod**; pedir a Salfa alta en QA si el front QA debe tener SSO propio.
+)

@@ -9,5 +9,7 @@ namespace SigmabotSync.Domain.Models.Synchronization
         public const string EquivalenciaDiscipline = "EquivalenciaDiscipline";
         /// <summary>Equivalencia origen → destino (texto) para TipoDeDocumento_singleSelect.</summary>
         public const string EquivalenciaTipoDocumento = "EquivalenciaTipoDocumento";
+        /// <summary>Equivalencia Localizador_singleSelect (WBS Codelco) → Cwa_singleSelect SALFA.</summary>
+        public const string EquivalenciaCwa = "EquivalenciaCwa";
     }
 }

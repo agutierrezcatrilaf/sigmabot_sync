@@ -1,0 +1,69 @@
+# ProjectSync – equivalencias y configurador (pendiente post-pruebas)
+
+Contexto trabajo **10008** (Codelco ↔ SALFA). Actualizado tras análisis 2026-07.
+
+## Flujo ida (Codelco → SALFA)
+
+1. Transmittal Codelco → adjuntos.
+2. `register/search` **origen**: `returnFields` = `docno` + `revision` + cada **`CampoOrigen`** de `TransmittalSyncCampoProyecto` (si origen NULL → nombre del `Campo` destino).
+3. Valores en `sourceHints` → XML register SALFA vía homologación + catálogos.
+
+## Flujo vuelta supersede (SALFA → Codelco)
+
+- `register/search` **destino**: lista fija en código + project fields **MANDATORY** del schema Codelco + parámetro `CamposConsultaRegistroDestino` (`TrabajosConfiguracion`).
+- No se deriva solo del mapeo de ida.
+- Optimización hecha: sin metadata origen en supersede; un solo search destino (hints precargados).
+
+## Tres equivalencias actuales (tabla `TransmittalSyncEquivalencia`)
+
+| Tipo BD | Catálogo homologación (`Catalogo`) | Origen Codelco (`CampoOrigen`) | Destino SALFA (`Campo`) | Modo match HOY | ValorOrigen en BD | ValorDestino | Default si no match |
+|---------|-----------------------------------|--------------------------------|-------------------------|----------------|-------------------|--------------|---------------------|
+| `Discipline` | `EquivalenciaDiscipline` | `Especialidad_singleSelect` | `Discipline_singleSelect` | **Exacto** | Texto completo Aconex | Picklist SALFA | `General` |
+| `TipoDocumento` | `EquivalenciaTipoDocumento` | `TipoDeDocumento_singleSelect` | `TipoDeDocumento_singleSelect` | **Prefijo código** (hardcode) | Código (`201OH`) | Picklist SALFA (`DPI-...`) | **NULL** (sin IAD) |
+| `Cwa` | `EquivalenciaCwa` | `Localizador_singleSelect` (WBS) | `Cwa_singleSelect` | **Exacto** | Columna D Excel (WBS texto) | Columna F (`CWA-...` / `General`) | `General` |
+
+**Pendiente confirmar con negocio:** si TipoDocumento puede ser match **exacto** (texto completo en `ValorOrigen`), se puede quitar `ResolveEquivalenciaTipoDocumento` (prefijo) y usar `ResolveByName` como Discipline/Cwa.
+
+## Cuatro formas de resolver valor (homologación)
+
+1. **`CampoOrigen` + search** – lectura en `register/search` origen.
+2. **`Catalogo` = TiposDocumentos / EstatusDocumentos** – tabla BD nombre → id Aconex (`DocumentTypeId`, `DocumentStatusId`).
+3. **`Catalogo` = Equivalencia*`** – tabla `TransmittalSyncEquivalencia` texto → texto SALFA.
+4. **Sin search** – adjunto transmittal, `ValorDefault` (`TBD`, `@UtcNow`), token `@IdEstatusDocumentoDestino` (vuelta).
+
+## Brecha configurador (post-pruebas)
+
+Hoy configurable vía API `ProjectSyncConfig`:
+- `TransmittalSyncCampoProyecto`: Campo, CampoOrigen, Catalogo, ValorDefault, EsObligatorio.
+- `TransmittalSyncEquivalencia`: Tipo, ValorOrigen, ValorDestino.
+- `TrabajosConfiguracion`: IdEstatusDocumentoDestino, CamposConsultaRegistroDestino, SubjectFiltroTransmittalVuelta, etc.
+
+**No configurable hoy:**
+- Modo de match equivalencia (exacto vs prefijo código) – fijado en `AconexDocumentCatalog.cs` por nombre de catálogo.
+- `returnFields` ida – derivados automáticamente del mapeo (no hay `CamposConsultaRegistroOrigen`).
+
+### Propuesta futura (opción recomendada)
+
+Columna `ModoMatch` en `TransmittalSyncEquivalencia` (o por `Tipo`):
+- `Exacto` – Discipline, Cwa, posiblemente TipoDocumento si confirman negocio.
+- `PrefijoCodigo` – TipoDocumento si siguen con códigos únicos al inicio del texto Aconex.
+
+UI configurador:
+- Combo `Catalogo`: vacío | TiposDocumentos | EstatusDocumentos | EquivalenciaDiscipline | EquivalenciaTipoDocumento | EquivalenciaCwa.
+- Grilla equivalencias por `Tipo` + columna ModoMatch + ayuda ValorOrigen.
+- Parámetro trabajo: `CamposConsultaRegistroDestino` (ya existe) para vuelta.
+
+## Scripts relevantes
+
+- `Scripts/Seed_TransmittalSyncCampoMapeo.sql` – homologación campos.
+- `Scripts/Seed_TransmittalSyncEquivalencia_10008.sql` – equivalencias (reemplazo total al cargar Excel).
+- `Scripts/Upsert_Cwa_EquivalenciaHomologacion_10008.sql` – Localizador + TipoDocumento sin default.
+- `Scripts/Template_Insert_TransmittalSyncEquivalencia_Cwa_10008.sql` – plantilla Cwa.
+- `Scripts/Upsert_CamposConsultaRegistroDestino_10008.sql` – search destino supersede.
+
+## Código clave
+
+- `TransmittalSyncService.BuildRegisterSearchReturnFields` – returnFields ida desde mapeo.
+- `TransmittalSyncService.BuildTargetRegisterSearchReturnFields` – returnFields destino supersede.
+- `AconexDocumentCatalog.ResolveByCatalog` – Tipos/Estatus + equivalencias.
+- `TransmittalRegisterXmlBuilder.BuildFromFieldMappings` – aplica catálogo y fallback `ValorDefault` solo en catálogos equivalencia.
