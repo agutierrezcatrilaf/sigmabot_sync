@@ -5,8 +5,8 @@ using SigmabotSync.Domain.Models.Synchronization;
 namespace SigmabotSync.Domain.Configuration
 {
     /// <summary>
-    /// Ida Codelco → SALFA: {CodProyecto}-EXT-{CWA}-{Disciplina}-{TipoDocCodigo}-{Correlativo}.
-    /// CodigoDestino de equivalencia solo en segmento tipo documento (por ahora).
+    /// Ida Codelco → SALFA: {CodProyecto}-EXT-{CwaCodigo}-{DisciplinaCodigo}-{TipoDocCodigo}-{Correlativo}.
+    /// Segmentos CWA, disciplina y tipo documento usan CodigoDestino de equivalencias.
     /// </summary>
     public static class ProjectSyncSalfaDocumentNumberBuilder
     {
@@ -43,16 +43,13 @@ namespace SigmabotSync.Domain.Configuration
                 ?? GetHint(sourceHints, "discipline");
             string tipoDeDocumento = GetHint(sourceHints, "TipoDeDocumento_singleSelect");
 
-            string cwaSegment = documentCatalog?.ResolveByCatalog(
-                AconexDocumentCatalogNames.EquivalenciaCwa, localizador);
+            string cwaSegment = documentCatalog?.ResolveEquivalenciaCwaCodigoDocno(localizador);
             if (string.IsNullOrWhiteSpace(cwaSegment) && !string.IsNullOrWhiteSpace(wbsSegment))
-                cwaSegment = documentCatalog?.ResolveEquivalenciaCwaByWbsCode(wbsSegment);
+                cwaSegment = documentCatalog?.ResolveEquivalenciaCwaCodigoDocnoByWbsCode(wbsSegment);
 
-            string disciplineSegment = documentCatalog?.ResolveByCatalog(
-                AconexDocumentCatalogNames.EquivalenciaDiscipline, especialidad);
+            string disciplineSegment = documentCatalog?.ResolveEquivalenciaDisciplineCodigoDocno(especialidad);
             if (string.IsNullOrWhiteSpace(disciplineSegment) && string.IsNullOrWhiteSpace(especialidad))
-                disciplineSegment = documentCatalog?.ResolveByCatalog(
-                    AconexDocumentCatalogNames.EquivalenciaDiscipline, "MD - MULTIDISCIPLINA");
+                disciplineSegment = documentCatalog?.ResolveEquivalenciaDisciplineCodigoDocno("MD - MULTIDISCIPLINA");
 
             string tipoDocSource = !string.IsNullOrWhiteSpace(tipoDeDocumento)
                 ? tipoDeDocumento
@@ -61,12 +58,12 @@ namespace SigmabotSync.Domain.Configuration
 
             if (string.IsNullOrWhiteSpace(cwaSegment))
             {
-                error = $"Sin equivalencia CWA para Localizador='{localizador ?? ""}' / WBS='{wbsSegment ?? ""}'.";
+                error = $"Sin CodigoDestino CWA para Localizador='{localizador ?? ""}' / WBS='{wbsSegment ?? ""}'.";
                 return null;
             }
             if (string.IsNullOrWhiteSpace(disciplineSegment))
             {
-                error = $"Sin equivalencia Discipline para Especialidad='{especialidad ?? ""}'.";
+                error = $"Sin CodigoDestino Discipline para Especialidad='{especialidad ?? ""}'.";
                 return null;
             }
             if (string.IsNullOrWhiteSpace(tipoDocCodigo))

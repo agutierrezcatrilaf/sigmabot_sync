@@ -4,6 +4,30 @@ namespace SigmabotSync.Application.Common
 {
     public static class AconexRegisterResponseParser
     {
+        public static string ParseRegisterDocumentNumber(string responseText)
+        {
+            if (string.IsNullOrWhiteSpace(responseText))
+                return null;
+            try
+            {
+                var doc = new XmlDocument();
+                doc.LoadXml(responseText);
+
+                XmlNode numberNode =
+                    doc.SelectSingleNode("//*[local-name()='RegisterDocumentResult']/*[local-name()='DocumentNumber']")
+                    ?? doc.SelectSingleNode("//*[local-name()='DocumentNumber']")
+                    ?? doc.SelectSingleNode("//RegisterDocumentResult/DocumentNumber");
+                if (numberNode != null && !string.IsNullOrWhiteSpace(numberNode.InnerText))
+                    return numberNode.InnerText.Trim();
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public static string ParseRegisterDocumentId(string responseText)
         {
             if (string.IsNullOrWhiteSpace(responseText))

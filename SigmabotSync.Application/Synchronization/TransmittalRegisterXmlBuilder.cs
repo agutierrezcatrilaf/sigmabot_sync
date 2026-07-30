@@ -128,6 +128,13 @@ namespace SigmabotSync.Application.Synchronization
             var sb = new StringBuilder();
             sb.Append("<Document>");
 
+            if (omitDocumentNumber)
+            {
+                sb.Append("<AutoNumber>true</AutoNumber>");
+                emitted.Add("AutoNumber");
+                emitted.Add("DocumentNumber");
+            }
+
             foreach (TransmittalSyncCampoMapeoItem map in mappings)
             {
                 if (map == null || string.IsNullOrWhiteSpace(map.CampoDestino))
@@ -216,7 +223,7 @@ namespace SigmabotSync.Application.Synchronization
                 emitted.Add("HasFile");
             }
 
-            AppendMandatorySchemaFieldsNotMapped(targetSchema, emitted, sb);
+            AppendMandatorySchemaFieldsNotMapped(targetSchema, emitted, sb, omitDocumentNumber);
 
             sb.Append("</Document>");
             return sb.ToString();
@@ -516,7 +523,8 @@ namespace SigmabotSync.Application.Synchronization
         private static void AppendMandatorySchemaFieldsNotMapped(
             AconexRegisterSchemaSnapshot targetSchema,
             HashSet<string> emitted,
-            StringBuilder sb)
+            StringBuilder sb,
+            bool omitDocumentNumber = false)
         {
             if (targetSchema?.Fields == null)
                 return;
@@ -532,6 +540,8 @@ namespace SigmabotSync.Application.Synchronization
                 if (emitted.Contains(destino))
                     continue;
                 if (string.Equals(destino, "id", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (omitDocumentNumber && IsDocumentNumberField(destino))
                     continue;
                 if (!ShouldEmitIdentifier(destino))
                     continue;

@@ -10,7 +10,7 @@ namespace SigmabotSync.Domain.Models.Synchronization
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public static AconexDocumentCatalog Empty { get; } = new AconexDocumentCatalog(
-            EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap);
+            EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap, EmptyMap);
 
         public AconexDocumentCatalog(
             IReadOnlyDictionary<string, string> idTipoPorNombre,
@@ -18,7 +18,9 @@ namespace SigmabotSync.Domain.Models.Synchronization
             IReadOnlyDictionary<string, string> equivalenciaDiscipline = null,
             IReadOnlyDictionary<string, string> equivalenciaTipoDocumento = null,
             IReadOnlyDictionary<string, string> equivalenciaCwa = null,
-            IReadOnlyDictionary<string, string> equivalenciaTipoDocumentoCodigoDocno = null)
+            IReadOnlyDictionary<string, string> equivalenciaTipoDocumentoCodigoDocno = null,
+            IReadOnlyDictionary<string, string> equivalenciaDisciplineCodigoDocno = null,
+            IReadOnlyDictionary<string, string> equivalenciaCwaCodigoDocno = null)
         {
             IdTipoPorNombre = idTipoPorNombre ?? EmptyMap;
             IdEstatusPorNombre = idEstatusPorNombre ?? EmptyMap;
@@ -26,6 +28,8 @@ namespace SigmabotSync.Domain.Models.Synchronization
             EquivalenciaTipoDocumento = equivalenciaTipoDocumento ?? EmptyMap;
             EquivalenciaCwa = equivalenciaCwa ?? EmptyMap;
             EquivalenciaTipoDocumentoCodigoDocno = equivalenciaTipoDocumentoCodigoDocno ?? EmptyMap;
+            EquivalenciaDisciplineCodigoDocno = equivalenciaDisciplineCodigoDocno ?? EmptyMap;
+            EquivalenciaCwaCodigoDocno = equivalenciaCwaCodigoDocno ?? EmptyMap;
         }
 
         public IReadOnlyDictionary<string, string> IdTipoPorNombre { get; }
@@ -38,10 +42,29 @@ namespace SigmabotSync.Domain.Models.Synchronization
         public IReadOnlyDictionary<string, string> EquivalenciaCwa { get; }
         /// <summary>TipoDocumento ValorOrigen → CodigoDestino (segmento tipo doc en docno SALFA).</summary>
         public IReadOnlyDictionary<string, string> EquivalenciaTipoDocumentoCodigoDocno { get; }
+        /// <summary>Discipline ValorOrigen → CodigoDestino (segmento disciplina en docno SALFA).</summary>
+        public IReadOnlyDictionary<string, string> EquivalenciaDisciplineCodigoDocno { get; }
+        /// <summary>Cwa ValorOrigen → CodigoDestino (segmento CWA en docno SALFA).</summary>
+        public IReadOnlyDictionary<string, string> EquivalenciaCwaCodigoDocno { get; }
 
         public string ResolveEquivalenciaTipoDocumentoCodigoDocno(string sourceValue)
         {
             return ResolveEquivalenciaTipoDocumentoPrefixMap(EquivalenciaTipoDocumentoCodigoDocno, sourceValue);
+        }
+
+        public string ResolveEquivalenciaDisciplineCodigoDocno(string sourceValue)
+        {
+            return ResolveEquivalenciaTipoDocumentoPrefixMap(EquivalenciaDisciplineCodigoDocno, sourceValue);
+        }
+
+        public string ResolveEquivalenciaCwaCodigoDocno(string sourceValue)
+        {
+            return ResolveEquivalenciaTipoDocumentoPrefixMap(EquivalenciaCwaCodigoDocno, sourceValue);
+        }
+
+        public string ResolveEquivalenciaCwaCodigoDocnoByWbsCode(string wbsCode)
+        {
+            return ResolveEquivalenciaCwaByWbsCode(EquivalenciaCwaCodigoDocno, wbsCode);
         }
 
         public string ResolveByCatalog(string catalogo, string nameOrId)

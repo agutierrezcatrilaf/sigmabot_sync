@@ -32,6 +32,8 @@ namespace SigmabotSync.Infrastructure.Services
             var equivTipoDoc = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var equivCwa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var equivTipoDocCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var equivDisciplineCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var equivCwaCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             using (var cn = new SqlConnection(_connectionString))
             {
@@ -43,20 +45,22 @@ namespace SigmabotSync.Infrastructure.Services
                 {
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
-                        "Discipline", equivDiscipline, null, cancellationToken).ConfigureAwait(false);
+                        "Discipline", equivDiscipline, equivDisciplineCodigo, cancellationToken).ConfigureAwait(false);
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
                         "TipoDocumento", equivTipoDoc, equivTipoDocCodigo, cancellationToken).ConfigureAwait(false);
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
-                        "Cwa", equivCwa, null, cancellationToken).ConfigureAwait(false);
+                        "Cwa", equivCwa, equivCwaCodigo, cancellationToken).ConfigureAwait(false);
                 }
             }
 
             if (tipos.Count == 0 && estatus.Count == 0 && equivDiscipline.Count == 0 && equivTipoDoc.Count == 0 && equivCwa.Count == 0)
                 return AconexDocumentCatalog.Empty;
 
-            return new AconexDocumentCatalog(tipos, estatus, equivDiscipline, equivTipoDoc, equivCwa, equivTipoDocCodigo);
+            return new AconexDocumentCatalog(
+                tipos, estatus, equivDiscipline, equivTipoDoc, equivCwa, equivTipoDocCodigo,
+                equivDisciplineCodigo, equivCwaCodigo);
         }
 
         private static async Task LoadEquivalenciasAsync(

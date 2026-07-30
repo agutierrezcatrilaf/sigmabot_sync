@@ -317,6 +317,20 @@ namespace SigmabotSync.Application.Synchronization
                    string.Equals(source.ProjectId?.Trim(), lado2, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Ida Codelco→SALFA: Aconex asigna DocumentNumber vía &lt;AutoNumber&gt;true&lt;/AutoNumber&gt;.</summary>
+        private static bool ShouldUseSalfaAutoDocumentNumber(TransmittalSyncRunRequest request, ProyectoSyncItem sourceProject)
+        {
+            return !IsLado2Source(request, sourceProject);
+        }
+
+        private static string ResolveAssignedDocumentNumber(string responseText, string expectedDocumentNo)
+        {
+            string assigned = AconexRegisterResponseParser.ParseRegisterDocumentNumber(responseText);
+            if (!string.IsNullOrWhiteSpace(assigned))
+                return assigned.Trim();
+            return string.IsNullOrWhiteSpace(expectedDocumentNo) ? null : expectedDocumentNo.Trim();
+        }
+
         /// <summary>
         /// Vuelta SALFA→Codelco: solo transmitals cuyo Subject contenga
         /// <see cref="TransmittalSyncRunRequest.SubjectFiltroTransmittalVuelta"/>.
@@ -520,10 +534,14 @@ namespace SigmabotSync.Application.Synchronization
                 return false;
             }
 
-            await _state.SaveLocalDocumentMappingAsync(
-                request.IdTrabajo, targetProject.ProjectId, destDocNo, revision, localDocumentId, cancellationToken).ConfigureAwait(false);
+            string assignedDocNo = ResolveAssignedDocumentNumber(responseText, destDocNo);
+            if (!string.Equals(assignedDocNo, destDocNo, StringComparison.OrdinalIgnoreCase))
+                log?.Invoke($"  Docno asignado por Salfa (AutoNumber): {assignedDocNo} (previsto: {destDocNo})");
 
-            log?.Invoke($"Marcador creado en destino: {destDocNo} rev {revision} → {localDocumentId}");
+            await _state.SaveLocalDocumentMappingAsync(
+                request.IdTrabajo, targetProject.ProjectId, assignedDocNo, revision, localDocumentId, cancellationToken).ConfigureAwait(false);
+
+            log?.Invoke($"Marcador creado en destino: {assignedDocNo} rev {revision} → {localDocumentId}");
             return true;
         }
 
@@ -672,13 +690,17 @@ namespace SigmabotSync.Application.Synchronization
             }
 
             string localDocumentId = AconexRegisterResponseParser.ParseRegisterDocumentId(responseText);
+            string assignedDocNo = ResolveAssignedDocumentNumber(responseText, destinationDocumentNo);
             if (!string.IsNullOrWhiteSpace(localDocumentId))
             {
+                if (!string.Equals(assignedDocNo, destinationDocumentNo, StringComparison.OrdinalIgnoreCase))
+                    log?.Invoke($"  Docno asignado por Salfa (AutoNumber): {assignedDocNo} (previsto: {destinationDocumentNo})");
+
                 await _state.SaveLocalDocumentMappingAsync(
-                    request.IdTrabajo, targetProject.ProjectId, destinationDocumentNo, revision, localDocumentId, cancellationToken).ConfigureAwait(false);
+                    request.IdTrabajo, targetProject.ProjectId, assignedDocNo, revision, localDocumentId, cancellationToken).ConfigureAwait(false);
             }
 
-            log?.Invoke($"Documento registrado en destino: {destinationDocumentNo} rev {revision} → {localDocumentId ?? "?"}");
+            log?.Invoke($"Documento registrado en destino: {assignedDocNo} rev {revision} → {localDocumentId ?? "?"}");
             return true;
         }
 
@@ -1018,9 +1040,10 @@ namespace SigmabotSync.Application.Synchronization
                 }
                 else
                 {
+                    bool useAutoNumber = ShouldUseSalfaAutoDocumentNumber(request, sourceProject);
                     xml = TransmittalRegisterXmlBuilder.BuildFromFieldMappings(
                         fieldMappings, targetSchema, documentCatalog, attachment, revision, hasFile, sourceHints,
-                        fixedDocumentStatusId, omitDocumentNumber: false, request?.CodigoProyectoSalfa, out error);
+                        fixedDocumentStatusId, omitDocumentNumber: useAutoNumber, request?.CodigoProyectoSalfa, out error);
                 }
             }
             else
