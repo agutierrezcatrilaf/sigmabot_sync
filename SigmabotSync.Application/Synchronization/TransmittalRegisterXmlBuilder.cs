@@ -113,7 +113,6 @@ namespace SigmabotSync.Application.Synchronization
             IReadOnlyDictionary<string, string> sourceHints,
             string fixedDocumentStatusId,
             bool omitDocumentNumber,
-            string codigoProyectoSalfa,
             out string error)
         {
             error = null;
@@ -147,12 +146,12 @@ namespace SigmabotSync.Application.Synchronization
                     continue;
 
                 string value = ResolveMappingOrigenValue(
-                    map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog, codigoProyectoSalfa);
+                    map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog);
 
                 if (string.IsNullOrWhiteSpace(value)
                     && IsEquivalenciaCatalog(map.Catalogo)
                     && attachment != null
-                    && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                    && CodelcoDocumentNumberFormat.TryParse(
                         attachment.DocumentNo, out string wbsInfer, out string tipoInfer, out _))
                 {
                     if (string.Equals(map.Catalogo, AconexDocumentCatalogNames.EquivalenciaCwa, StringComparison.OrdinalIgnoreCase))
@@ -189,16 +188,7 @@ namespace SigmabotSync.Application.Synchronization
                 {
                     if (map.EsObligatorio)
                     {
-                        string origenLabel = map.CampoOrigen;
-                        if (ProjectSyncCampoOrigenTokens.IsSalfaDocumentNumberFromCodelco(map.CampoOrigen))
-                        {
-                            string codelcoDocNo = attachment?.DocumentNo?.Trim();
-                            ProjectSyncSalfaDocumentNumberBuilder.Build(
-                                codigoProyectoSalfa, documentCatalog, codelcoDocNo, sourceHints, out string docnoErr);
-                            if (!string.IsNullOrWhiteSpace(docnoErr))
-                                origenLabel = map.CampoOrigen + " (" + docnoErr + ")";
-                        }
-                        error = $"Campo obligatorio destino '{destino}' sin valor (origen '{origenLabel}').";
+                        error = $"Campo obligatorio destino '{destino}' sin valor (origen '{map.CampoOrigen}').";
                         return null;
                     }
                     continue;
@@ -275,7 +265,7 @@ namespace SigmabotSync.Application.Synchronization
                         continue;
 
                     string value = ResolveMappingOrigenValue(
-                        map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog, null);
+                        map, attachment, revision, sourceHints, fixedDocumentStatusId, documentCatalog);
                     if (string.IsNullOrWhiteSpace(value))
                         value = ApplyValorDefault(map.ValorDefault, hasFile, attachment, revision);
                     if (string.IsNullOrWhiteSpace(value))
@@ -471,8 +461,7 @@ namespace SigmabotSync.Application.Synchronization
             string revision,
             IReadOnlyDictionary<string, string> sourceHints,
             string fixedDocumentStatusId,
-            AconexDocumentCatalog documentCatalog,
-            string codigoProyectoSalfa)
+            AconexDocumentCatalog documentCatalog)
         {
             if (map != null && ProjectSyncCampoOrigenTokens.IsIdEstatusDocumentoDestino(map.CampoOrigen))
                 return fixedDocumentStatusId;
@@ -483,26 +472,10 @@ namespace SigmabotSync.Application.Synchronization
                 if (string.IsNullOrWhiteSpace(tipoDeDocumento))
                     tipoDeDocumento = GetHint(sourceHints, "doctype", "DocumentType");
                 if (string.IsNullOrWhiteSpace(tipoDeDocumento) && attachment != null
-                    && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                    && CodelcoDocumentNumberFormat.TryParse(
                         attachment.DocumentNo, out _, out string tipoFromDocno, out _))
                     tipoDeDocumento = tipoFromDocno;
                 return ProjectSyncDocumentTypeResolver.ResolveSalfaDocumentTypeName(tipoDeDocumento);
-            }
-
-            if (map != null && ProjectSyncCampoOrigenTokens.IsSalfaDocumentNumberFromCodelco(map.CampoOrigen))
-            {
-                string codelcoDocNo = attachment?.DocumentNo?.Trim();
-                if (string.IsNullOrWhiteSpace(codelcoDocNo))
-                    codelcoDocNo = GetHint(sourceHints, "DocumentNumber", "docno");
-
-                string docnoError;
-                string salfaDocNo = ProjectSyncSalfaDocumentNumberBuilder.Build(
-                    codigoProyectoSalfa, documentCatalog, codelcoDocNo, sourceHints, out docnoError);
-                if (!string.IsNullOrWhiteSpace(salfaDocNo))
-                    return salfaDocNo;
-                if (!string.IsNullOrWhiteSpace(docnoError))
-                    return null; // error surfaced by caller when obligatorio
-                return null;
             }
 
             string fromOrigen = ResolveOrigenValue(map?.CampoOrigen, attachment, revision, sourceHints);
@@ -510,7 +483,7 @@ namespace SigmabotSync.Application.Synchronization
                 && map != null
                 && string.Equals(map.CampoOrigen?.Trim(), "TipoDeDocumento_singleSelect", StringComparison.OrdinalIgnoreCase)
                 && attachment != null
-                && ProjectSyncSalfaDocumentNumberBuilder.TryParseCodelcoDocumentNumber(
+                && CodelcoDocumentNumberFormat.TryParse(
                     attachment.DocumentNo, out _, out string tipoOrigenInfer, out _))
                 fromOrigen = tipoOrigenInfer;
             return fromOrigen;

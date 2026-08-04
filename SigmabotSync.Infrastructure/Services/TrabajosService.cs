@@ -142,6 +142,9 @@ namespace SigmabotSync.Infrastructure.Services
                                 case "CamposConsultaRegistroDestino":
                                     result.CamposConsultaRegistroDestino = valor;
                                     break;
+                                case "CamposConsultaRegistroDestinoSalfa":
+                                    result.CamposConsultaRegistroDestinoSalfa = valor;
+                                    break;
                             }
                         }
 

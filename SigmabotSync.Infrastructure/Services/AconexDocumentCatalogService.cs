@@ -31,9 +31,6 @@ namespace SigmabotSync.Infrastructure.Services
             var equivDiscipline = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var equivTipoDoc = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var equivCwa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var equivTipoDocCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var equivDisciplineCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var equivCwaCodigo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             using (var cn = new SqlConnection(_connectionString))
             {
@@ -45,22 +42,20 @@ namespace SigmabotSync.Infrastructure.Services
                 {
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
-                        "Discipline", equivDiscipline, equivDisciplineCodigo, cancellationToken).ConfigureAwait(false);
+                        "Discipline", equivDiscipline, cancellationToken).ConfigureAwait(false);
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
-                        "TipoDocumento", equivTipoDoc, equivTipoDocCodigo, cancellationToken).ConfigureAwait(false);
+                        "TipoDocumento", equivTipoDoc, cancellationToken).ConfigureAwait(false);
                     await LoadEquivalenciasAsync(
                         cn, idTrabajo, acxProjectIdOrigen, acxProjectIdDestino,
-                        "Cwa", equivCwa, equivCwaCodigo, cancellationToken).ConfigureAwait(false);
+                        "Cwa", equivCwa, cancellationToken).ConfigureAwait(false);
                 }
             }
 
             if (tipos.Count == 0 && estatus.Count == 0 && equivDiscipline.Count == 0 && equivTipoDoc.Count == 0 && equivCwa.Count == 0)
                 return AconexDocumentCatalog.Empty;
 
-            return new AconexDocumentCatalog(
-                tipos, estatus, equivDiscipline, equivTipoDoc, equivCwa, equivTipoDocCodigo,
-                equivDisciplineCodigo, equivCwaCodigo);
+            return new AconexDocumentCatalog(tipos, estatus, equivDiscipline, equivTipoDoc, equivCwa);
         }
 
         private static async Task LoadEquivalenciasAsync(
@@ -70,11 +65,10 @@ namespace SigmabotSync.Infrastructure.Services
             string destino,
             string tipo,
             Dictionary<string, string> valorDestinoTarget,
-            Dictionary<string, string> codigoDestinoTarget,
             CancellationToken cancellationToken)
         {
             const string sql = @"
-                SELECT ValorOrigen, ValorDestino, CodigoDestino
+                SELECT ValorOrigen, ValorDestino
                 FROM TransmittalSyncEquivalencia
                 WHERE IdTrabajo = @IdTrabajo
                   AND Tipo = @Tipo
@@ -97,13 +91,10 @@ namespace SigmabotSync.Infrastructure.Services
                         {
                             string vo = reader[0] == DBNull.Value ? null : reader[0].ToString()?.Trim();
                             string vd = reader[1] == DBNull.Value ? null : reader[1].ToString()?.Trim();
-                            string cd = reader[2] == DBNull.Value ? null : reader[2].ToString()?.Trim();
                             if (string.IsNullOrEmpty(vo) || string.IsNullOrEmpty(vd))
                                 continue;
                             if (!valorDestinoTarget.ContainsKey(vo))
                                 valorDestinoTarget[vo] = vd;
-                            if (codigoDestinoTarget != null && !string.IsNullOrEmpty(cd) && !codigoDestinoTarget.ContainsKey(vo))
-                                codigoDestinoTarget[vo] = cd;
                         }
                     }
                 }

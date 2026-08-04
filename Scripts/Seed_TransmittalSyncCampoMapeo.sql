@@ -13,7 +13,6 @@ DELETE FROM TransmittalSyncCampoProyecto WHERE IdTrabajo = @IdTrabajo;
 INSERT INTO TransmittalSyncCampoProyecto
     (IdTrabajo, ACXProjectIdOrigen, ACXProjectIdDestino, Campo, CampoOrigen, EsObligatorio, ValorDefault, Catalogo, Orden)
 VALUES
-(@IdTrabajo, @Codelco, @Salfa, 'DocumentNumber',   '@SalfaDocumentNumberFromCodelco', 1, NULL, NULL,                 10),
 (@IdTrabajo, @Codelco, @Salfa, 'Title',            NULL,                   1, NULL, NULL,                 20),
 (@IdTrabajo, @Codelco, @Salfa, 'Revision',         NULL,                   1, NULL, NULL,                 30),
 (@IdTrabajo, @Codelco, @Salfa, 'DocumentTypeId',   '@DocumentTypeFromTipoDocumento', 1, NULL, 'TiposDocumentos', 40),

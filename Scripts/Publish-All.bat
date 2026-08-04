@@ -22,8 +22,7 @@ echo === Todo listo ===
 echo   %REPO%\publish\configurador\
 echo   %REPO%\publish\console\
 echo.
-set "PUBLISH_NOPAUSE="
-pause
+if not defined PUBLISH_NOPAUSE pause
 exit /b 0
 
 :fail

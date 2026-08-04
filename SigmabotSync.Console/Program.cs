@@ -530,13 +530,14 @@ namespace SigmabotSync.Console
             if (!string.IsNullOrWhiteSpace(trabajoConfig.SubjectFiltroTransmittalVuelta))
                 SigmabotSync.Application.Common.Utilities.Wlog(
                     $"  SubjectFiltroTransmittalVuelta={trabajoConfig.SubjectFiltroTransmittalVuelta.Trim()}", 0);
-            if (!string.IsNullOrWhiteSpace(trabajoConfig.CodigoProyectoSalfa))
-                SigmabotSync.Application.Common.Utilities.Wlog(
-                    $"  CodigoProyectoSalfa={trabajoConfig.CodigoProyectoSalfa.Trim()}", 0);
             var camposRegistroDestino = trabajoConfig.ToReturnFieldsRegistroDestino();
             if (camposRegistroDestino != null && camposRegistroDestino.Count > 0)
                 SigmabotSync.Application.Common.Utilities.Wlog(
-                    $"  CamposConsultaRegistroDestino={camposRegistroDestino.Count} campo(s)", 0);
+                    $"  CamposConsultaRegistroDestino (Codelco)={camposRegistroDestino.Count} campo(s)", 0);
+            var camposRegistroDestinoSalfa = trabajoConfig.ToReturnFieldsRegistroDestinoSalfa();
+            if (camposRegistroDestinoSalfa != null && camposRegistroDestinoSalfa.Count > 0)
+                SigmabotSync.Application.Common.Utilities.Wlog(
+                    $"  CamposConsultaRegistroDestinoSalfa={camposRegistroDestinoSalfa.Count} campo(s)", 0);
             SigmabotSync.Application.Common.Utilities.Wlog("", 0);
 
             var httpGet = new AconexHttpGetAdapter();
@@ -574,8 +575,11 @@ namespace SigmabotSync.Console
                         ? null
                         : trabajoConfig.IdProyecto.Trim(),
                     SubjectFiltroTransmittalVuelta = trabajoConfig.SubjectFiltroTransmittalVuelta?.Trim(),
+                    IdProyecto2 = string.IsNullOrWhiteSpace(trabajoConfig.IdProyecto2)
+                        ? null
+                        : trabajoConfig.IdProyecto2.Trim(),
                     CamposConsultaRegistroDestino = camposRegistroDestino,
-                    CodigoProyectoSalfa = trabajoConfig.CodigoProyectoSalfa?.Trim()
+                    CamposConsultaRegistroDestinoSalfa = camposRegistroDestinoSalfa
                 };
 
                 await syncWorker.RunAsync(request);

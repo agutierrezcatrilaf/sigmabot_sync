@@ -36,5 +36,32 @@ namespace SigmabotSync.Domain.Ports
             string revision,
             string localDocumentId,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Opción A: docno+rev+versión en proyecto origen ya sincronizado.
+        /// Si <paramref name="sourceVersionNumber"/> está vacío, usa <paramref name="sourceDocumentId"/>.
+        /// </summary>
+        Task<bool> IsSourceDocumentSyncedAsync(
+            int idTrabajo,
+            string sourceProjectId,
+            string sourceDocumentNo,
+            string sourceRevision,
+            string sourceVersionNumber,
+            string sourceDocumentId,
+            CancellationToken cancellationToken = default);
+
+        Task MarkSourceDocumentSyncedAsync(
+            int idTrabajo,
+            string sourceProjectId,
+            string sourceDocumentNo,
+            string sourceRevision,
+            string sourceVersionNumber,
+            string sourceDocumentId,
+            string destProjectId,
+            string destDocumentId,
+            string destDocumentNo,
+            string destRevision,
+            string mailId,
+            CancellationToken cancellationToken = default);
     }
 }

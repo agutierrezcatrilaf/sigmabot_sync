@@ -75,6 +75,11 @@ namespace SigmabotSync.Domain.Entities
         /// </summary>
         public string CamposConsultaRegistroDestino { get; set; }
 
+        /// <summary>
+        /// ProjectSync supersede ida: returnFields extra en register/search del destino SALFA.
+        /// </summary>
+        public string CamposConsultaRegistroDestinoSalfa { get; set; }
+
         /// <summary>Tipo de trabajo: FileExtraction, ProjectSync, FullExtraction. Viene del campo Tipo de la tabla Trabajos.</summary>
         public string TipoTrabajo { get; set; }
 
@@ -130,10 +135,17 @@ namespace SigmabotSync.Domain.Entities
             return list ?? new List<string>();
         }
 
-        /// <summary>returnFields para register/search del destino (supersede SALFA→Codelco).</summary>
+        /// <summary>returnFields para register/search del destino Codelco (supersede vuelta).</summary>
         public List<string> ToReturnFieldsRegistroDestino()
         {
             var list = ParseStringArray(CamposConsultaRegistroDestino);
+            return list ?? new List<string>();
+        }
+
+        /// <summary>returnFields para register/search del destino SALFA (supersede ida).</summary>
+        public List<string> ToReturnFieldsRegistroDestinoSalfa()
+        {
+            var list = ParseStringArray(CamposConsultaRegistroDestinoSalfa);
             return list ?? new List<string>();
         }
 

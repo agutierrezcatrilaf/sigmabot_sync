@@ -25,7 +25,9 @@ namespace SigmabotSync.Domain.Configuration
         public const string IdEstatusDocumentoDestino = "IdEstatusDocumentoDestino";
         /// <summary>En vuelta (SALFA→Codelco), solo procesar transmitals cuyo Subject contenga este texto (ej. Final).</summary>
         public const string SubjectFiltroTransmittalVuelta = "SubjectFiltroTransmittalVuelta";
-        /// <summary>returnFields extra para register/search del proyecto destino antes de supersede (CSV o JSON array).</summary>
+        /// <summary>returnFields extra register/search destino Codelco (supersede vuelta SALFA→Codelco).</summary>
         public const string CamposConsultaRegistroDestino = "CamposConsultaRegistroDestino";
+        /// <summary>returnFields extra register/search destino SALFA (supersede ida Codelco→SALFA).</summary>
+        public const string CamposConsultaRegistroDestinoSalfa = "CamposConsultaRegistroDestinoSalfa";
     }
 }

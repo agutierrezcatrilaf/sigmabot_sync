@@ -1,4 +1,5 @@
-﻿-- returnFields para register/search en Codelco antes de supersede (vuelta SALFA->Codelco).
+﻿-- returnFields extra para register/search en CODELCO (supersede vuelta SALFA→Codelco).
+-- No mezclar con CamposConsultaRegistroDestinoSalfa (proyecto SALFA).
 DECLARE @IdTrabajo INT = 10008;
 DECLARE @Nombre   NVARCHAR(100) = N'CamposConsultaRegistroDestino';
 DECLARE @Valor    NVARCHAR(MAX) = N'Emisororigen_singleSelect,Especialidad_singleSelect,Fase_singleSelect,Localizador_singleSelect,NroDeContrato_singleSelect,Proveedor_singleSelect,Rendicin_singleSelect,TipoDeDocumento_singleSelect';

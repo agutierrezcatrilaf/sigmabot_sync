@@ -208,6 +208,8 @@ namespace SigmabotSync.Infrastructure.External
                     FileName = attachmentNode.SelectSingleNode("FileName")?.InnerText ?? "",
                     FileSize = ParseFileSize(attachmentNode.SelectSingleNode("FileSize")?.InnerText),
                     Revision = attachmentNode.SelectSingleNode("Revision")?.InnerText ?? "",
+                    VersionNumber = attachmentNode.SelectSingleNode("VersionNumber")?.InnerText
+                        ?? attachmentNode.SelectSingleNode("Version")?.InnerText ?? "",
                     RevisionDate = attachmentNode.SelectSingleNode("RevisionDate")?.InnerText ?? "",
                     Status = attachmentNode.SelectSingleNode("Status")?.InnerText ?? "",
                     Title = attachmentNode.SelectSingleNode("Title")?.InnerText ?? ""

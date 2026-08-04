@@ -15,6 +15,7 @@ namespace SigmabotSync.Domain.Ports
         /// <param name="searchQuery">Filtro Lucene (legado). Preferir <paramref name="filterDocumentNo"/>.</param>
         /// <param name="filterDocumentNo">Filtro directo en body JSON (<c>docno</c>), formato soportado por Aconex register/search.</param>
         /// <param name="filterRevision">Filtro directo en body JSON (<c>revision</c>); omitir si revisión comodín.</param>
+        /// <param name="filterVersionNumber">Filtro directo en body JSON (<c>versionnumber</c>).</param>
         Task<AconexRegisterSearchResult> SearchRegisterPageAsync(
             string baseUrl,
             string projectId,
@@ -28,6 +29,7 @@ namespace SigmabotSync.Domain.Ports
             CancellationToken cancellationToken = default,
             string searchQuery = null,
             string filterDocumentNo = null,
-            string filterRevision = null);
+            string filterRevision = null,
+            string filterVersionNumber = null);
     }
 }

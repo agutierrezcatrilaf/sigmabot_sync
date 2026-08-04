@@ -40,7 +40,8 @@ namespace SigmabotSync.Infrastructure.External
             CancellationToken cancellationToken = default,
             string searchQuery = null,
             string filterDocumentNo = null,
-            string filterRevision = null)
+            string filterRevision = null,
+            string filterVersionNumber = null)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new ArgumentException("baseUrl requerido.", nameof(baseUrl));
@@ -67,7 +68,9 @@ namespace SigmabotSync.Infrastructure.External
             if (filterByDocNo)
             {
                 body["docno"] = filterDocumentNo.Trim();
-                if (!string.IsNullOrWhiteSpace(filterRevision))
+                if (!string.IsNullOrWhiteSpace(filterVersionNumber))
+                    body["versionnumber"] = filterVersionNumber.Trim();
+                else if (!string.IsNullOrWhiteSpace(filterRevision))
                     body["revision"] = filterRevision.Trim();
             }
             else if (!string.IsNullOrWhiteSpace(searchQuery))

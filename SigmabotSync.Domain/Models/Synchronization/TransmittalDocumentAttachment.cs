@@ -9,6 +9,7 @@ namespace SigmabotSync.Domain.Models.Synchronization
         public string FileName { get; set; }
         public long FileSize { get; set; }
         public string Revision { get; set; }
+        public string VersionNumber { get; set; }
         public string RevisionDate { get; set; }
         public string Status { get; set; }
         public string Title { get; set; }

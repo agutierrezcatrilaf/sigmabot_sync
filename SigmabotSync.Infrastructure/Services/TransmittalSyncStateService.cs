@@ -138,5 +138,115 @@ namespace SigmabotSync.Infrastructure.Services
                 }
             }
         }
+
+        public async Task<bool> IsSourceDocumentSyncedAsync(
+            int idTrabajo,
+            string sourceProjectId,
+            string sourceDocumentNo,
+            string sourceRevision,
+            string sourceVersionNumber,
+            string sourceDocumentId,
+            CancellationToken cancellationToken = default)
+        {
+            string versionKey = sourceVersionNumber?.Trim() ?? "";
+            string docId = sourceDocumentId?.Trim() ?? "";
+
+            string sql;
+            if (!string.IsNullOrWhiteSpace(versionKey))
+            {
+                sql = @"
+                    SELECT COUNT(1)
+                    FROM TransmittalSyncDocumentProcesados
+                    WHERE IdTrabajo = @IdTrabajo
+                      AND SourceProjectId = @SourceProjectId
+                      AND SourceDocumentNo = @SourceDocumentNo
+                      AND SourceRevision = @SourceRevision
+                      AND SourceVersionNumber = @SourceVersionNumber";
+            }
+            else if (!string.IsNullOrWhiteSpace(docId))
+            {
+                sql = @"
+                    SELECT COUNT(1)
+                    FROM TransmittalSyncDocumentProcesados
+                    WHERE IdTrabajo = @IdTrabajo
+                      AND SourceProjectId = @SourceProjectId
+                      AND SourceDocumentId = @SourceDocumentId";
+            }
+            else
+            {
+                return false;
+            }
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                await cn.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    cmd.Parameters.AddWithValue("@SourceProjectId", sourceProjectId ?? "");
+                    cmd.Parameters.AddWithValue("@SourceDocumentNo", sourceDocumentNo ?? "");
+                    cmd.Parameters.AddWithValue("@SourceRevision", sourceRevision ?? "");
+                    if (!string.IsNullOrWhiteSpace(versionKey))
+                        cmd.Parameters.AddWithValue("@SourceVersionNumber", versionKey);
+                    else
+                        cmd.Parameters.AddWithValue("@SourceDocumentId", docId);
+
+                    object scalar = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+                    return scalar != null && Convert.ToInt32(scalar) > 0;
+                }
+            }
+        }
+
+        public async Task MarkSourceDocumentSyncedAsync(
+            int idTrabajo,
+            string sourceProjectId,
+            string sourceDocumentNo,
+            string sourceRevision,
+            string sourceVersionNumber,
+            string sourceDocumentId,
+            string destProjectId,
+            string destDocumentId,
+            string destDocumentNo,
+            string destRevision,
+            string mailId,
+            CancellationToken cancellationToken = default)
+        {
+            const string sql = @"
+                IF NOT EXISTS (
+                    SELECT 1 FROM TransmittalSyncDocumentProcesados
+                    WHERE IdTrabajo = @IdTrabajo
+                      AND SourceProjectId = @SourceProjectId
+                      AND SourceDocumentNo = @SourceDocumentNo
+                      AND SourceRevision = @SourceRevision
+                      AND SourceVersionNumber = @SourceVersionNumber)
+                BEGIN
+                    INSERT INTO TransmittalSyncDocumentProcesados (
+                        IdTrabajo, SourceProjectId, SourceDocumentNo, SourceRevision, SourceVersionNumber,
+                        SourceDocumentId, DestProjectId, DestDocumentId, DestDocumentNo, DestRevision, MailId, ProcessedAt)
+                    VALUES (
+                        @IdTrabajo, @SourceProjectId, @SourceDocumentNo, @SourceRevision, @SourceVersionNumber,
+                        @SourceDocumentId, @DestProjectId, @DestDocumentId, @DestDocumentNo, @DestRevision, @MailId, SYSUTCDATETIME())
+                END";
+
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                await cn.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    cmd.Parameters.AddWithValue("@SourceProjectId", sourceProjectId ?? "");
+                    cmd.Parameters.AddWithValue("@SourceDocumentNo", sourceDocumentNo ?? "");
+                    cmd.Parameters.AddWithValue("@SourceRevision", sourceRevision ?? "");
+                    cmd.Parameters.AddWithValue("@SourceVersionNumber", sourceVersionNumber?.Trim() ?? "");
+                    cmd.Parameters.AddWithValue("@SourceDocumentId", (object)sourceDocumentId?.Trim() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@DestProjectId", destProjectId ?? "");
+                    cmd.Parameters.AddWithValue("@DestDocumentId", destDocumentId ?? "");
+                    cmd.Parameters.AddWithValue("@DestDocumentNo", (object)destDocumentNo?.Trim() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@DestRevision", (object)destRevision?.Trim() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@MailId", (object)mailId?.Trim() ?? DBNull.Value);
+                    await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 }
