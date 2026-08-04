@@ -26,8 +26,5 @@ publish/
 ## Ignore backup files
 *_backup*/
 
-## ConfigWeb: settings locales con credenciales (usar settings.json.example)
-SigmabotSync.ConfigWeb/settings.json
-
 ## Config API: cadena de conexión local (usar appsettings.Development.json.example)
 SigmabotConfig.Api/appsettings.Development.json

@@ -9,7 +9,6 @@ alwaysApply: true
 
 - **SigmabotSync** (`SigmabotSync/`): solución .NET 8 — consola batch, `SigmabotConfig.Api`, dominio/infra.
 - **SigmabotConfig** (`../SigmabotConfig/`): front **Angular 19** standalone + Material. Consume la API. `config.json` → `apiBaseUrl`.
-- Blazor `ConfigWeb` existe pero el front oficial para Salfa es **Angular** en `SigmabotConfig`.
 
 ## Despliegue IIS (confirmado 2026-07)
 

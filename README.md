@@ -97,8 +97,7 @@ El diseño sigue los principios de **Arquitectura Hexagonal** (Ports & Adapters)
 | Proyecto | Tipo | Descripción |
 |---|---|---|
 | `SigmabotSync.Console` | Console app (.NET 8) | Runner principal. Ejecuta los trabajos programados (typically como Tarea Programada de Windows). |
-| `SigmabotSync.ConfigTool` | WPF (.NET 8 Windows) | Herramienta de escritorio para configurar credenciales, trabajos y su programación. |
-| `SigmabotSync.ConfigWeb` | Blazor Server (.NET 8) | Versión web de la herramienta de configuración (UI sobre MudBlazor). |
+| `SigmabotConfig.Api` | ASP.NET Core Web API (.NET 8) | API REST para la configuración (consumida por el front Angular `SigmabotConfig`). |
 | `SigmabotSync.Tools.NetShareSmokeTest` | Console (.NET 8) | Utilidad de diagnóstico para validar accesos a network shares usados por los workers. |
 
 ## Casos de Uso
@@ -127,12 +126,9 @@ Cada worker recorre el proyecto origen, descarga los recursos pertinentes y los 
 
 ## Tecnologías y Dependencias
 
-- **.NET 8.0** (`net8.0` y `net8.0-windows` para WPF).
+- **.NET 8.0** (`net8.0`).
 - **Microsoft.Data.SqlClient** `5.2.3` - Acceso a SQL Server.
 - **Newtonsoft.Json** `13.0.4` - Serialización JSON (`settings.json`, payloads).
-- **CommunityToolkit.Mvvm** `8.4.2` - MVVM en `ConfigTool` y `ConfigWeb`.
-- **MudBlazor** `7.16.0` - UI de `ConfigWeb`.
-- **WPF** - UI de `ConfigTool`.
 - **System.Net.Http** / **System.Xml.Serialization** (BCL) - Cliente HTTP y deserialización de respuestas XML de Aconex.
 
 > Todas las versiones están **fijas** (sin rangos). Los `packages.lock.json` (uno por proyecto) garantizan restore reproducible. Ver sección [Seguridad y Builds Reproducibles](#seguridad-y-builds-reproducibles).
@@ -162,8 +158,7 @@ SigmabotSync/
 │   └── Data/                               # Helpers de mapeo SQL
 │
 ├── SigmabotSync.Console/                   # Runner principal (Tarea Programada)
-├── SigmabotSync.ConfigTool/                # UI de configuración (WPF)
-├── SigmabotSync.ConfigWeb/                 # UI de configuración (Blazor + MudBlazor)
+├── SigmabotConfig.Api/                     # API REST de configuración
 ├── SigmabotSync.Tools.NetShareSmokeTest/   # Utilidad de diagnóstico de shares
 │
 ├── Scripts/                                # DDL de SQL Server (Credenciales, Trabajos, etc.)
@@ -188,10 +183,7 @@ Cada ejecutable lee la cadena de conexión desde su `settings.json` local. Ejemp
 
 ### Credenciales y trabajos
 
-Toda la configuración funcional (credenciales de Aconex, definición de trabajos, programaciones, parámetros) vive en **SQL Server**. Se edita desde:
-
-- `SigmabotSync.ConfigTool` (WPF, escritorio).
-- `SigmabotSync.ConfigWeb` (Blazor, web).
+Toda la configuración funcional (credenciales de Aconex, definición de trabajos, programaciones, parámetros) vive en **SQL Server**. Se edita desde `SigmabotConfig` (Angular, web) vía `SigmabotConfig.Api`.
 
 El DDL de las tablas está en `Scripts/`:
 

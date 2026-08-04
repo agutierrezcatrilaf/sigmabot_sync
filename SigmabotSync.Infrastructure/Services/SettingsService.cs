@@ -12,7 +12,7 @@ namespace SigmabotSync.Infrastructure.Services
         /// <summary>Ruta absoluta del archivo JSON de configuración.</summary>
         public string SettingsFilePath => _settingsPath;
 
-        /// <param name="settingsFilePath">Si es null, usa <c>settings.json</c> en el directorio base de la app (consola/WPF).</param>
+        /// <param name="settingsFilePath">Si es null, usa <c>settings.json</c> en el directorio base de la app (consola).</param>
         public SettingsService(string settingsFilePath = null)
         {
             _settingsPath = string.IsNullOrWhiteSpace(settingsFilePath)
