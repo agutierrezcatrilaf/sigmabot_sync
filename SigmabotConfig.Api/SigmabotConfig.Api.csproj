@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SigmabotConfig.Api</RootNamespace>
+    <AssemblyName>SigmabotConfig.Api</AssemblyName>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SigmabotSync.Domain\SigmabotSync.Domain.csproj" />
+    <ProjectReference Include="..\SigmabotSync.Infrastructure.Config\SigmabotSync.Infrastructure.Config.csproj" />
+  </ItemGroup>
+
+</Project>

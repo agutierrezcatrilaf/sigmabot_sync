@@ -1,0 +1,17 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Database": {
+    "ConnectionString": "Server=SERVIDOR;Database=sigmabot;User Id=USUARIO;Password=CLAVE;TrustServerCertificate=True;"
+  },
+  "Cors": {
+    "AllowedOrigins": [
+      "http://SERVIDOR:8080",
+      "http://localhost:8080"
+    ]
+  }
+}
