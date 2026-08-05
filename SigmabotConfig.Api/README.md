@@ -2,6 +2,8 @@
 
 API REST para el configurador de SigmabotSync (credenciales, trabajos, parámetros, programación).
 
+Depende de `SigmabotSync.Domain` y `SigmabotSync.Infrastructure.Config` (SQL del configurador, sin clientes Aconex). La integración Aconex vive en `SigmabotSync.Infrastructure` y solo la usa la consola.
+
 ## Configuración de base de datos
 
 La cadena de conexión **solo** se define en el servidor, en `appsettings` o variables de entorno:

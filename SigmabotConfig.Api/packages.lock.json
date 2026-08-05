@@ -316,7 +316,7 @@
           "Newtonsoft.Json": "[13.0.4, )"
         }
       },
-      "sigmabotsync.infrastructure": {
+      "sigmabotsync.infrastructure.config": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.SqlClient": "[5.2.3, )",

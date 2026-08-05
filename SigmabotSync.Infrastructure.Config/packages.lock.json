@@ -274,14 +274,6 @@
         "dependencies": {
           "Newtonsoft.Json": "[13.0.4, )"
         }
-      },
-      "sigmabotsync.infrastructure.config": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Data.SqlClient": "[5.2.3, )",
-          "Newtonsoft.Json": "[13.0.4, )",
-          "SigmabotSync.Domain": "[1.0.0, )"
-        }
       }
     }
   }

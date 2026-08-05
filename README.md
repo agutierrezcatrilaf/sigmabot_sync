@@ -68,7 +68,11 @@ El diseño sigue los principios de **Arquitectura Hexagonal** (Ports & Adapters)
 - `AppState` - Estado compartido entre workers.
 - `Utilities` - Utilidades transversales.
 
-### 3. `SigmabotSync.Infrastructure` (Adaptadores de Salida)
+### 3. `SigmabotSync.Infrastructure.Config` (SQL del configurador)
+
+Capa usada por **SigmabotConfig.Api**: editores CRUD, `TrabajosEjecucionService` y utilidades SQL. **Sin** clientes HTTP Aconex.
+
+### 4. `SigmabotSync.Infrastructure` (Worker / Aconex)
 
 #### `External/` (Adaptadores HTTP de Aconex)
 
@@ -80,19 +84,16 @@ El diseño sigue los principios de **Arquitectura Hexagonal** (Ports & Adapters)
 - `AconexRegisterWriteAdapter` - Implementa `IAconexRegisterWritePort`.
 - `AconexDocumentSyncAdapter`, `AconexExternalProjectAdapter` - Adaptadores adicionales para los flujos de sync.
 
-#### `Services/` (Acceso a BD y configuración)
+#### `Services/` (Runtime del worker)
 
 - `SettingsService` - Lectura del `settings.json` (sólo cadena de conexión).
-- `ConnectionStringHelper` - Construcción/validación de la cadena de conexión a SQL Server.
-- `CredencialesService` - CRUD de credenciales en BD.
-- `TrabajosService`, `TrabajosProgramacionService`, `TrabajosEjecucionService` - CRUD del modelo de trabajos.
-- `ConfigurationEditor/` - Servicios auxiliares para edición de configuración.
+- `CredencialesService` - Lectura de credenciales en BD (consola).
+- `TrabajosService`, `TrabajosProgramacionService` - Consultas del scheduler.
+- Servicios de estado ProjectSync / catálogo Aconex en BD.
 
-#### `Data/`
+> Editores CRUD, `ConnectionStringHelper`, `SqlDataReaderMapper` y `TrabajosEjecucionService` (compartido con la API) están en `SigmabotSync.Infrastructure.Config`.
 
-- `SqlDataReaderMapper` - Helper de mapeo de `SqlDataReader` a entidades del dominio.
-
-### 4. Adaptadores de Entrada
+### 5. Adaptadores de Entrada
 
 | Proyecto | Tipo | Descripción |
 |---|---|---|
@@ -152,10 +153,13 @@ SigmabotSync/
 │   ├── Services/                           # Servicios de aplicación
 │   └── Common/                             # Helpers compartidos
 │
-├── SigmabotSync.Infrastructure/            # Adaptadores de salida
-│   ├── External/                           # Clientes/adaptadores HTTP de Aconex
-│   ├── Services/                           # Acceso a BD (credenciales, trabajos, config)
+├── SigmabotSync.Infrastructure.Config/     # SQL del configurador (API)
+│   ├── Services/ConfigurationEditor/       # CRUD para SigmabotConfig.Api
 │   └── Data/                               # Helpers de mapeo SQL
+│
+├── SigmabotSync.Infrastructure/            # Worker: Aconex + runtime consola
+│   ├── External/                           # Clientes/adaptadores HTTP de Aconex
+│   └── Services/                           # Acceso a BD usado por la consola
 │
 ├── SigmabotSync.Console/                   # Runner principal (Tarea Programada)
 ├── SigmabotConfig.Api/                     # API REST de configuración

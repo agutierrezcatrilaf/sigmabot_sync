@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SigmabotSync.Application\SigmabotSync.Application.csproj" />
     <ProjectReference Include="..\SigmabotSync.Domain\SigmabotSync.Domain.csproj" />
+    <ProjectReference Include="..\SigmabotSync.Infrastructure.Config\SigmabotSync.Infrastructure.Config.csproj" />
     <ProjectReference Include="..\SigmabotSync.Infrastructure\SigmabotSync.Infrastructure.csproj" />
   </ItemGroup>
 

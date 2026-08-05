@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using SigmabotSync.Domain.Entities;
 
@@ -18,8 +19,53 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
 
         public IReadOnlyList<TrabajoProgramacion> ListarPorIdTrabajo(int idTrabajo)
         {
-            var inner = new TrabajosProgramacionService(_connectionString);
-            return inner.ObtenerPorIdTrabajo(idTrabajo);
+            const string sql = @"
+                SELECT Id, IdTrabajo, DiaSemana, Hora, Activo
+                FROM [dbo].[TrabajosProgramacion]
+                WHERE IdTrabajo = @IdTrabajo
+                ORDER BY DiaSemana, Hora";
+
+            var lista = new List<TrabajoProgramacion>();
+            using (var cn = new SqlConnection(_connectionString))
+            {
+                cn.Open();
+                using (var cmd = new SqlCommand(sql, cn))
+                {
+                    cmd.Parameters.AddWithValue("@IdTrabajo", idTrabajo);
+                    using (var rdr = cmd.ExecuteReader())
+                    {
+                        while (rdr.Read())
+                        {
+                            lista.Add(new TrabajoProgramacion
+                            {
+                                Id = Convert.ToInt32(rdr.GetValue(0), CultureInfo.InvariantCulture),
+                                IdTrabajo = Convert.ToInt32(rdr.GetValue(1), CultureInfo.InvariantCulture),
+                                DiaSemana = Convert.ToInt32(rdr.GetValue(2), CultureInfo.InvariantCulture),
+                                Hora = LeerHoraSql(rdr, 3),
+                                Activo = Convert.ToBoolean(rdr.GetValue(4), CultureInfo.InvariantCulture)
+                            });
+                        }
+                    }
+                }
+            }
+            return lista;
+        }
+
+        private static TimeSpan LeerHoraSql(SqlDataReader rdr, int ordinal)
+        {
+            if (rdr.IsDBNull(ordinal))
+                return TimeSpan.Zero;
+            var v = rdr.GetValue(ordinal);
+            if (v is TimeSpan ts)
+                return ts;
+            if (v is DateTime dt)
+                return dt.TimeOfDay;
+            var s = Convert.ToString(v, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(s))
+                return TimeSpan.Zero;
+            if (TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+            return TimeSpan.Zero;
         }
 
         public int Insertar(TrabajoProgramacion fila)
