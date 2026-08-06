@@ -18,13 +18,23 @@ dotnet build SigmabotConfig.sln -c Release
 
 ## Publish (API + Angular)
 
-Requiere el front en `../SigmabotConfig` (repo Angular separado).
+Requiere el front en `../SigmabotConfig` (repo Angular).
+
+**Desde la raíz del repo** (recomendado):
+
+```bash
+Publish-Configurador.bat
+```
+
+o:
 
 ```bash
 Scripts\Publish-Configurador.bat
 ```
 
-Salida: `publish\configurador\api` y `publish\configurador\web`.
+Salida: `publish\configurador\api`, `publish\configurador\web` y ZIP `publish\SigmabotConfig-Servidor.zip`.
+
+La connection string para `appsettings.Production.json` se toma de (en orden): parámetro `-ConnectionString`, `appsettings.Development.json`, o `../SigmabotSync.Worker/SigmabotSync.Console/settings.json`.
 
 ## Relación con otros repos
 

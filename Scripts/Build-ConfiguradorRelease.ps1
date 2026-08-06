@@ -1,9 +1,10 @@
 # Genera release del configurador: SigmabotConfig.Api + Angular estático.
+# Repo: SigmabotSync.Api (raíz = $RepoRoot). Angular hermano: ..\SigmabotConfig
 # Ejemplo:
-#   .\scripts\Build-ConfiguradorRelease.ps1 -ServerHost "192.168.1.50" -ApiPort 5154 -WebPort 8080
+#   .\Scripts\Build-ConfiguradorRelease.ps1 -ServerHost "192.168.1.50" -ApiPort 5154 -WebPort 8080
 #
 # appsettings.Production.json se genera en publish con:
-#   - ConnectionString: -ConnectionString, o appsettings.Development.json, o settings.json de la consola
+#   - ConnectionString: -ConnectionString, appsettings.Development.json, o settings.json del worker (..\SigmabotSync.Worker)
 #   - Cors: origen web del servidor + http://localhost:<WebPort>
 
 param(
@@ -50,12 +51,23 @@ function Resolve-ConnectionString {
         }
     }
 
-    $consoleSettings = Join-Path $Root "SigmabotSync.Console\settings.json"
-    if (Test-Path $consoleSettings) {
-        $cfg = Get-Content $consoleSettings -Raw | ConvertFrom-Json
+    $siblingRoot = Split-Path $Root -Parent
+    $workerSettings = Join-Path $siblingRoot "SigmabotSync.Worker\SigmabotSync.Console\settings.json"
+    if (Test-Path $workerSettings) {
+        $cfg = Get-Content $workerSettings -Raw | ConvertFrom-Json
         $cs = $cfg.DatabaseConnectionString
         if ($cs -and $cs.Trim()) {
-            Write-Host "ConnectionString: SigmabotSync.Console\settings.json"
+            Write-Host "ConnectionString: SigmabotSync.Worker\SigmabotSync.Console\settings.json"
+            return $cs.Trim()
+        }
+    }
+
+    $legacyConsoleSettings = Join-Path $Root "SigmabotSync.Console\settings.json"
+    if (Test-Path $legacyConsoleSettings) {
+        $cfg = Get-Content $legacyConsoleSettings -Raw | ConvertFrom-Json
+        $cs = $cfg.DatabaseConnectionString
+        if ($cs -and $cs.Trim()) {
+            Write-Host "ConnectionString: SigmabotSync.Console\settings.json (legacy monorepo)"
             return $cs.Trim()
         }
     }

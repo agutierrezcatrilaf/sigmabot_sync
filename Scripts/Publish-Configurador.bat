@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions
 REM Publica API + Angular del configurador (publish\configurador\).
+REM Repo: SigmabotSync.Api (GitHub sigmabot_sync). Front: ..\SigmabotConfig
 REM Edite SERVER_HOST si despliega en otro servidor.
 
 set "SERVER_HOST=155.254.24.155"
