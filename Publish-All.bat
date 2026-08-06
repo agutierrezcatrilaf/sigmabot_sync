@@ -1,26 +1,26 @@
 @echo off
 setlocal EnableExtensions
-REM Publica configurador + consola. Doble clic en la raiz del repo.
+REM LEGACY: el monorepo SigmabotSync ya no publica aqui. Delega a los repos separados.
 
-set "REPO=%~dp0"
+set "SALFA=%~dp0.."
 set "PUBLISH_NOPAUSE=1"
 
 echo.
 echo ========================================
-echo  Publish completo SigmabotSync
+echo  Publish completo (repos separados)
 echo ========================================
 echo.
 
-call "%REPO%Scripts\Publish-Configurador.bat"
+call "%SALFA%SigmabotSync.Api\Publish-Configurador.bat"
 if errorlevel 1 goto :fail
 
-call "%REPO%Scripts\Publish-Console.bat"
+call "%SALFA%SigmabotSync.Worker\Publish-Worker.bat"
 if errorlevel 1 goto :fail
 
 echo.
 echo === Todo listo ===
-echo   publish\configurador\
-echo   publish\console\
+echo   SigmabotSync.Api\publish\configurador\
+echo   SigmabotSync.Worker\publish\console\
 echo.
 set "PUBLISH_NOPAUSE="
 pause
