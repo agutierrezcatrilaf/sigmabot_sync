@@ -11,10 +11,6 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
 {
     public ProjectSyncConfigController(IDatabaseConnectionProvider db) : base(db) { }
 
-    /// <summary>
-    /// Homologación del par. Por defecto IdProyecto→IdProyecto2.
-    /// Con <paramref name="invertir"/>=true edita IdProyecto2→IdProyecto (vuelta).
-    /// </summary>
     [HttpGet]
     public IActionResult Obtener(int idTrabajo, [FromQuery] bool invertir = false)
     {
@@ -37,7 +33,7 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
                 SentidoInvertido = invertir,
                 AcxProjectIdOrigen = ctx.Origen,
                 AcxProjectIdDestino = ctx.Destino,
-                Campos = svc.ListarCampos(idTrabajo, ctx.Origen, ctx.Destino).Select(ToDto).ToList(),
+                CamposDestino = svc.ListarCamposDestino(idTrabajo, ctx.Origen, ctx.Destino).Select(ToDto).ToList(),
                 Equivalencias = svc.ListarEquivalencias(idTrabajo, ctx.Origen, ctx.Destino).Select(ToDto).ToList()
             });
         }
@@ -47,10 +43,10 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
         }
     }
 
-    [HttpPut("campos")]
-    public IActionResult GuardarCampos(
+    [HttpPut("campos-destino")]
+    public IActionResult GuardarCamposDestino(
         int idTrabajo,
-        [FromBody] GuardarProjectSyncCamposRequest request,
+        [FromBody] GuardarProjectSyncCamposDestinoRequest request,
         [FromQuery] bool invertir = false)
     {
         if (!Db.IsConfigured)
@@ -62,13 +58,13 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
             if (ctx.Result != null)
                 return ctx.Result;
 
-            var campos = request?.Campos ?? Array.Empty<ProjectSyncCampoDto>();
-            var errores = ValidarCampos(campos);
+            var campos = request?.CamposDestino ?? Array.Empty<ProjectSyncCampoDestinoDto>();
+            var errores = ValidarCamposDestino(campos);
             if (errores.Count > 0)
                 return ValidationProblem(errores);
 
             var svc = new ProjectSyncConfigEditorService(ConnectionString);
-            svc.ReemplazarCampos(idTrabajo, ctx.Origen, ctx.Destino, campos.Select(ToFila).ToList());
+            svc.ReemplazarCamposDestino(idTrabajo, ctx.Origen, ctx.Destino, campos.Select(ToFila).ToList());
             return NoContent();
         }
         catch (Exception ex)
@@ -120,7 +116,7 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
         {
             return (BadRequest(new ApiProblem
             {
-                Message = "La homologación y equivalencias solo aplican a trabajos ProjectSync."
+                Message = "La matriz destino y equivalencias solo aplican a trabajos ProjectSync."
             }), null, null, null, null);
         }
 
@@ -136,7 +132,7 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
         {
             return (BadRequest(new ApiProblem
             {
-                Message = "Configure IdProyecto e IdProyecto2 antes de editar homologación ProjectSync."
+                Message = "Configure IdProyecto e IdProyecto2 antes de editar ProjectSync."
             }), null, null, null, null);
         }
 
@@ -147,7 +143,7 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
         return (null, lado1, lado2, origen, destino);
     }
 
-    private static IReadOnlyList<string> ValidarCampos(IReadOnlyList<ProjectSyncCampoDto> campos)
+    private static IReadOnlyList<string> ValidarCamposDestino(IReadOnlyList<ProjectSyncCampoDestinoDto> campos)
     {
         var errors = new List<string>();
         if (campos == null)
@@ -155,10 +151,26 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
 
         for (int i = 0; i < campos.Count; i++)
         {
-            if (string.IsNullOrWhiteSpace(campos[i]?.Campo))
-                errors.Add($"Fila campos #{i + 1}: Campo destino es obligatorio.");
+            var fila = campos[i];
+            if (string.IsNullOrWhiteSpace(fila?.CampoDestino))
+                errors.Add($"Fila #{i + 1}: Campo destino es obligatorio.");
+            if (string.IsNullOrWhiteSpace(fila?.TipoFuente))
+                errors.Add($"Fila #{i + 1}: Tipo fuente es obligatorio.");
+            else if (!EsTipoFuenteValido(fila.TipoFuente))
+                errors.Add($"Fila #{i + 1}: Tipo fuente «{fila.TipoFuente}» no reconocido.");
         }
         return errors;
+    }
+
+    private static bool EsTipoFuenteValido(string tipo)
+    {
+        string t = (tipo ?? "").Trim();
+        return string.Equals(t, ProjectSyncCampoDestinoTipoFuente.CampoOrigen, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, ProjectSyncCampoDestinoTipoFuente.ReglaDocumentTypeFromTipo, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, ProjectSyncCampoDestinoTipoFuente.ParametroIdEstatusDestino, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, ProjectSyncCampoDestinoTipoFuente.Adjunto, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, ProjectSyncCampoDestinoTipoFuente.Constante, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, ProjectSyncCampoDestinoTipoFuente.SoloPreservar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<string> ValidarEquivalencias(IReadOnlyList<ProjectSyncEquivalenciaDto> equivalencias)
@@ -184,26 +196,30 @@ public sealed class ProjectSyncConfigController : ApiControllerBase
         return errors;
     }
 
-    private static ProjectSyncCampoDto ToDto(ProjectSyncCampoProyectoFila fila) => new()
+    private static ProjectSyncCampoDestinoDto ToDto(ProjectSyncCampoDestinoFila fila) => new()
     {
         AcxProjectIdOrigen = fila.AcxProjectIdOrigen,
         AcxProjectIdDestino = fila.AcxProjectIdDestino,
-        Campo = fila.Campo,
-        CampoOrigen = fila.CampoOrigen,
+        CampoDestino = fila.CampoDestino,
+        TipoFuente = fila.TipoFuente,
+        FuenteValor = fila.FuenteValor,
         EsObligatorio = fila.EsObligatorio,
         ValorDefault = fila.ValorDefault,
         Catalogo = fila.Catalogo,
-        Orden = fila.Orden
+        Orden = fila.Orden,
+        Activo = fila.Activo
     };
 
-    private static ProjectSyncCampoProyectoFila ToFila(ProjectSyncCampoDto dto) => new()
+    private static ProjectSyncCampoDestinoFila ToFila(ProjectSyncCampoDestinoDto dto) => new()
     {
-        Campo = dto.Campo,
-        CampoOrigen = dto.CampoOrigen,
+        CampoDestino = dto.CampoDestino,
+        TipoFuente = dto.TipoFuente,
+        FuenteValor = dto.FuenteValor,
         EsObligatorio = dto.EsObligatorio,
         ValorDefault = dto.ValorDefault,
         Catalogo = dto.Catalogo,
-        Orden = dto.Orden
+        Orden = dto.Orden,
+        Activo = dto.Activo
     };
 
     private static ProjectSyncEquivalenciaDto ToDto(ProjectSyncEquivalenciaFila fila) => new()
