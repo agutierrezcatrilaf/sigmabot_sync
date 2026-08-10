@@ -3,6 +3,7 @@ using SigmabotConfig.Api.Models;
 using SigmabotConfig.Api.Services;
 using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Domain.Security;
 using SigmabotSync.Infrastructure.Services.ConfigurationEditor;
 
 namespace SigmabotConfig.Api.Controllers;
@@ -10,7 +11,12 @@ namespace SigmabotConfig.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class CatalogosController : ApiControllerBase
 {
-    public CatalogosController(IDatabaseConnectionProvider db) : base(db) { }
+    private readonly ICredencialClaveProtector _claveProtector;
+
+    public CatalogosController(IDatabaseConnectionProvider db, ICredencialClaveProtector claveProtector) : base(db)
+    {
+        _claveProtector = claveProtector;
+    }
 
     [HttpGet("tipos-trabajo")]
     public IActionResult TiposTrabajo()
@@ -115,7 +121,7 @@ public sealed class CatalogosController : ApiControllerBase
 
         try
         {
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = new CredencialesEditorService(ConnectionString, _claveProtector);
             var aconex = new List<CredencialComboDto>();
             var bd = new List<CredencialComboDto>();
             foreach (var c in svc.ListarTodas().OrderBy(x => x.Id))

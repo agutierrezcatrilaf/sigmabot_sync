@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Domain.Security;
 using SigmabotSync.Infrastructure.Data;
 
 namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
@@ -13,10 +14,12 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
     public class CredencialesEditorService
     {
         private readonly string _connectionString;
+        private readonly ICredencialClaveProtector _claveProtector;
 
-        public CredencialesEditorService(string connectionString)
+        public CredencialesEditorService(string connectionString, ICredencialClaveProtector claveProtector = null)
         {
             _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _claveProtector = claveProtector ?? NullCredencialClaveProtector.Instance;
         }
 
         public IReadOnlyList<Credencial> ListarTodas()
@@ -38,7 +41,11 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
                     var dt = new DataTable();
                     adapter.Fill(dt);
                     foreach (DataRow row in dt.Rows)
-                        lista.Add(row.MapTo<Credencial>());
+                    {
+                        var credencial = row.MapTo<Credencial>();
+                        credencial.UnprotectClaves(_claveProtector);
+                        lista.Add(credencial);
+                    }
                 }
             }
 
@@ -119,7 +126,7 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
             }
         }
 
-        private static void AddParameters(SqlCommand cmd, Credencial c, bool includeId)
+        private void AddParameters(SqlCommand cmd, Credencial c, bool includeId)
         {
             if (includeId)
                 cmd.Parameters.AddWithValue("@Id", c.Id);
@@ -127,15 +134,18 @@ namespace SigmabotSync.Infrastructure.Services.ConfigurationEditor
             cmd.Parameters.AddWithValue("@Tipo", c.Tipo ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@Aconex_Instancia", (object)c.Aconex_Instancia ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Aconex_Usuario", (object)c.Aconex_Usuario ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@Aconex_Clave", (object)c.Aconex_Clave ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Aconex_Clave", (object)ClaveParaAlmacenar(c.Aconex_Clave) ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Aconex_IntegrationId", (object)c.Aconex_IntegrationId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Aconex_OrganizationId", (object)c.Aconex_OrganizationId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Aconex_UserId", (object)c.Aconex_UserId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@BD_Servidor", (object)c.BD_Servidor ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@BD_TipoConexion", (object)c.BD_TipoConexion ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@BD_Usuario", (object)c.BD_Usuario ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@BD_Clave", (object)c.BD_Clave ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@BD_Clave", (object)ClaveParaAlmacenar(c.BD_Clave) ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@BD_BaseDatos", (object)c.BD_BaseDatos ?? DBNull.Value);
         }
+
+        private string ClaveParaAlmacenar(string plaintext) =>
+            _claveProtector.IsEnabled ? _claveProtector.Protect(plaintext) : plaintext;
     }
 }

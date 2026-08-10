@@ -2,6 +2,9 @@
   "Database": {
     "ConnectionString": "Server=YOUR_SERVER;Database=sigmabot;User Id=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
   },
+  "Credenciales": {
+    "EncryptionKey": "GENERATE_32_BYTES_BASE64"
+  },
   "Cors": {
     "AllowedOrigins": [ "http://localhost:4200" ]
   }

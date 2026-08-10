@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SigmabotConfig.Api.Models;
 using SigmabotConfig.Api.Services;
+using SigmabotSync.Domain.Security;
 using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
 using SigmabotSync.Infrastructure.Services.ConfigurationEditor;
@@ -10,7 +11,15 @@ namespace SigmabotConfig.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class CredencialesController : ApiControllerBase
 {
-    public CredencialesController(IDatabaseConnectionProvider db) : base(db) { }
+    private readonly ICredencialClaveProtector _claveProtector;
+
+    public CredencialesController(IDatabaseConnectionProvider db, ICredencialClaveProtector claveProtector) : base(db)
+    {
+        _claveProtector = claveProtector;
+    }
+
+    private CredencialesEditorService CreateService() =>
+        new CredencialesEditorService(ConnectionString, _claveProtector);
 
     [HttpGet]
     public IActionResult Listar()
@@ -19,7 +28,7 @@ public sealed class CredencialesController : ApiControllerBase
             return NotConfigured();
         try
         {
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = CreateService();
             return Ok(svc.ListarTodas());
         }
         catch (Exception ex)
@@ -35,7 +44,7 @@ public sealed class CredencialesController : ApiControllerBase
             return NotConfigured();
         try
         {
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = CreateService();
             var c = svc.ListarTodas().FirstOrDefault(x => x.Id == id);
             if (c == null)
                 return NotFound(new ApiProblem { Message = "Credencial no encontrada." });
@@ -59,7 +68,7 @@ public sealed class CredencialesController : ApiControllerBase
         try
         {
             credencial.Id = 0;
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = CreateService();
             var id = svc.Insertar(credencial);
             credencial.Id = id;
             return CreatedAtAction(nameof(Obtener), new { id }, credencial);
@@ -82,7 +91,7 @@ public sealed class CredencialesController : ApiControllerBase
 
         try
         {
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = CreateService();
             svc.Actualizar(credencial);
             return NoContent();
         }
@@ -103,7 +112,7 @@ public sealed class CredencialesController : ApiControllerBase
             return NotConfigured();
         try
         {
-            var svc = new CredencialesEditorService(ConnectionString);
+            var svc = CreateService();
             svc.Eliminar(id);
             return NoContent();
         }
