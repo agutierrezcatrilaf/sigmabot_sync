@@ -7,5 +7,10 @@
   },
   "Cors": {
     "AllowedOrigins": [ "http://localhost:4200" ]
+  },
+  "WorkerLogs": {
+    "AllowedDirectories": [
+      "C:\\path\\to\\SigmabotSync.Worker\\SigmabotSync.Console\\bin\\Debug\\net8.0\\Logs"
+    ]
   }
 }
