@@ -15,7 +15,7 @@ public sealed class SystemController : ControllerBase
         _db = db;
     }
 
-    /// <summary>Estado de la BD configurada en appsettings (sin exponer la cadena).</summary>
+    /// <summary>Estado de la BD configurada en appsettings (servidor/BD sin password).</summary>
     [HttpGet("status")]
     public ActionResult<SystemStatusResponse> GetStatus()
     {
@@ -29,6 +29,8 @@ public sealed class SystemController : ControllerBase
             });
         }
 
+        TryParseEndpoint(_db.GetConnectionString(), out var server, out var database);
+
         try
         {
             using (var cn = new SqlConnection(_db.GetConnectionString()))
@@ -40,6 +42,8 @@ public sealed class SystemController : ControllerBase
             {
                 DatabaseConfigured = true,
                 DatabaseReachable = true,
+                DatabaseServer = server,
+                DatabaseName = database,
                 Message = "Conexión a SQL Server correcta."
             });
         }
@@ -49,8 +53,28 @@ public sealed class SystemController : ControllerBase
             {
                 DatabaseConfigured = true,
                 DatabaseReachable = false,
+                DatabaseServer = server,
+                DatabaseName = database,
                 Message = "Error al conectar: " + ex.Message
             });
+        }
+    }
+
+    private static void TryParseEndpoint(string connectionString, out string server, out string database)
+    {
+        server = null;
+        database = null;
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return;
+        try
+        {
+            var b = new SqlConnectionStringBuilder(connectionString);
+            server = string.IsNullOrWhiteSpace(b.DataSource) ? null : b.DataSource.Trim();
+            database = string.IsNullOrWhiteSpace(b.InitialCatalog) ? null : b.InitialCatalog.Trim();
+        }
+        catch
+        {
+            // No exponer la cadena cruda si no parsea.
         }
     }
 }
