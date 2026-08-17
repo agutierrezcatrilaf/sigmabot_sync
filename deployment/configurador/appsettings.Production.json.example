@@ -13,5 +13,9 @@
       "http://SERVIDOR:8080",
       "http://localhost:8080"
     ]
+  },
+  "OnDemandExecution": {
+    "Enabled": false,
+    "WorkerExePath": "C:\\ProgramData\\Sigmatec\\Salfa\\worker\\SigmabotSync.Console.exe"
   }
 }

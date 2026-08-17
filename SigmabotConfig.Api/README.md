@@ -38,7 +38,8 @@ Por defecto permite `http://localhost:4200` (Angular). Ajuste `Cors:AllowedOrigi
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/api/system/status` | Estado de conexión BD (sin exponer cadena) |
+| GET | `/api/system/status` | Estado de conexión BD + flag ejecución a demanda |
+| POST | `/api/trabajos/{id}/ejecutar` | Lanza el worker (`--manual`). Solo si `OnDemandExecution:Enabled` |
 | GET/POST/PUT/DELETE | `/api/credenciales` | CRUD credenciales |
 | GET/POST/PUT/DELETE | `/api/trabajos` | CRUD trabajos |
 | GET/PUT | `/api/trabajos/{id}/parametros` | Parámetros guiados por tipo |

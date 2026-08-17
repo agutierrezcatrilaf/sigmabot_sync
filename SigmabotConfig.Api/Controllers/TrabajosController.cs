@@ -3,6 +3,7 @@ using SigmabotConfig.Api.Models;
 using SigmabotConfig.Api.Services;
 using SigmabotSync.Domain.Configuration;
 using SigmabotSync.Domain.Entities;
+using SigmabotSync.Infrastructure.Services;
 using SigmabotSync.Infrastructure.Services.ConfigurationEditor;
 
 namespace SigmabotConfig.Api.Controllers;
@@ -10,7 +11,12 @@ namespace SigmabotConfig.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class TrabajosController : ApiControllerBase
 {
-    public TrabajosController(IDatabaseConnectionProvider db) : base(db) { }
+    private readonly OnDemandExecutionService _onDemand;
+
+    public TrabajosController(IDatabaseConnectionProvider db, OnDemandExecutionService onDemand) : base(db)
+    {
+        _onDemand = onDemand;
+    }
 
     [HttpGet]
     public IActionResult Listar()
@@ -109,6 +115,56 @@ public sealed class TrabajosController : ApiControllerBase
         catch (InvalidOperationException ex)
         {
             return NotFound(new ApiProblem { Message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new ApiProblem { Message = ex.Message });
+        }
+    }
+
+    /// <summary>Lanza el worker con --manual {id}. Solo si OnDemandExecution está habilitado.</summary>
+    [HttpPost("{id:int}/ejecutar")]
+    public IActionResult Ejecutar(int id)
+    {
+        if (!_onDemand.IsEnabled)
+            return StatusCode(403, new ApiProblem { Message = "La ejecución a demanda no está habilitada en este servidor." });
+        if (!Db.IsConfigured)
+            return NotConfigured();
+
+        try
+        {
+            var trabajosSvc = new TrabajosEditorService(ConnectionString);
+            var trabajo = trabajosSvc.ListarTodos().FirstOrDefault(x => x.Id == id);
+            if (trabajo == null)
+                return NotFound(new ApiProblem { Message = "Trabajo no encontrado." });
+
+            if (!string.Equals(trabajo.Estado, TrabajoEstadoIds.Activo, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new ApiProblem
+                {
+                    Message = "El trabajo debe estar en estado Activo para ejecutarlo a demanda."
+                });
+            }
+
+            var ejecSvc = new TrabajosEjecucionService(ConnectionString);
+            if (ejecSvc.ExisteEjecucionEnCurso(id))
+            {
+                return Conflict(new ApiProblem
+                {
+                    Message = "Este trabajo ya tiene una ejecución en curso."
+                });
+            }
+
+            if (!_onDemand.TryStart(id, out var error))
+            {
+                var code = _onDemand.IsEnabled ? 503 : 403;
+                return StatusCode(code, new ApiProblem { Message = error });
+            }
+
+            return Accepted(new ApiProblem
+            {
+                Message = "Ejecución iniciada (Manual). Consulte el historial en unos segundos."
+            });
         }
         catch (Exception ex)
         {

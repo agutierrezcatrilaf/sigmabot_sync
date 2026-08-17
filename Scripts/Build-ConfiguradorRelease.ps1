@@ -154,6 +154,10 @@ if ($resolvedCs) {
         Cors = @{
             AllowedOrigins = @($webUrl, "http://localhost:${WebPort}")
         }
+        OnDemandExecution = @{
+            Enabled = $false
+            WorkerExePath = "C:\ProgramData\Sigmatec\Salfa\worker\SigmabotSync.Console.exe"
+        }
     }
     $productionSettings | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $apiOut "appsettings.Production.json") -Encoding UTF8
     Write-Host "Generado: api\appsettings.Production.json (Cors + ConnectionString)"

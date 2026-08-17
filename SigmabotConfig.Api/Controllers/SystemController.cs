@@ -9,10 +9,12 @@ namespace SigmabotConfig.Api.Controllers;
 public sealed class SystemController : ControllerBase
 {
     private readonly IDatabaseConnectionProvider _db;
+    private readonly OnDemandExecutionService _onDemand;
 
-    public SystemController(IDatabaseConnectionProvider db)
+    public SystemController(IDatabaseConnectionProvider db, OnDemandExecutionService onDemand)
     {
         _db = db;
+        _onDemand = onDemand;
     }
 
     /// <summary>Estado de la BD configurada en appsettings (servidor/BD sin password).</summary>
@@ -25,7 +27,8 @@ public sealed class SystemController : ControllerBase
             {
                 DatabaseConfigured = false,
                 DatabaseReachable = false,
-                Message = "Configure Database:ConnectionString en appsettings del servidor API."
+                Message = "Configure Database:ConnectionString en appsettings del servidor API.",
+                OnDemandExecutionEnabled = _onDemand.IsAvailable
             });
         }
 
@@ -44,7 +47,8 @@ public sealed class SystemController : ControllerBase
                 DatabaseReachable = true,
                 DatabaseServer = server,
                 DatabaseName = database,
-                Message = "Conexión a SQL Server correcta."
+                Message = "Conexión a SQL Server correcta.",
+                OnDemandExecutionEnabled = _onDemand.IsAvailable
             });
         }
         catch (Exception ex)
@@ -55,7 +59,8 @@ public sealed class SystemController : ControllerBase
                 DatabaseReachable = false,
                 DatabaseServer = server,
                 DatabaseName = database,
-                Message = "Error al conectar: " + ex.Message
+                Message = "Error al conectar: " + ex.Message,
+                OnDemandExecutionEnabled = _onDemand.IsAvailable
             });
         }
     }

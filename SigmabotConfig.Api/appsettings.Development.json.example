@@ -12,5 +12,9 @@
     "AllowedDirectories": [
       "C:\\path\\to\\SigmabotSync.Worker\\SigmabotSync.Console\\bin\\Debug\\net8.0\\Logs"
     ]
+  },
+  "OnDemandExecution": {
+    "Enabled": false,
+    "WorkerExePath": "C:\\path\\to\\SigmabotSync.Console.exe"
   }
 }

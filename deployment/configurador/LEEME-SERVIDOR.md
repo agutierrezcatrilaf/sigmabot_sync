@@ -72,6 +72,20 @@ Opcional: `install-api-task.bat` (como administrador) para arrancar la API al in
 - API: `run-api.bat`
 - Web: use IIS o un servidor estático. Para producción use IIS.
 
+## 7. Ejecución a demanda (solo servidor de pruebas)
+
+En `appsettings.Production.json` de la API, si el exe está en la misma máquina:
+
+```json
+"OnDemandExecution": {
+  "Enabled": true,
+  "WorkerExePath": "C:\\ProgramData\\Sigmatec\\Salfa\\worker\\SigmabotSync.Console.exe"
+}
+```
+
+Ajuste la ruta al `SigmabotSync.Console.exe` real. En producción deje `Enabled: false`.
+Reinicie la API. El configurador mostrará **Ejecutar ahora** en Trabajos e Historial.
+
 ## Notas
 
 - La consola **no** necesita la API; el configurador **sí** necesita API + BD.

@@ -9,4 +9,6 @@ public sealed class SystemStatusResponse
     /// <summary>Nombre de la base de datos.</summary>
     public string DatabaseName { get; set; }
     public string Message { get; set; }
+    /// <summary>True si este servidor permite lanzar el worker a demanda.</summary>
+    public bool OnDemandExecutionEnabled { get; set; }
 }

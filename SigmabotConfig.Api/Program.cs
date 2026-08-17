@@ -10,8 +10,10 @@ builder.Services.Configure<CredencialesSettings>(builder.Configuration.GetSectio
 builder.Services.Configure<CorsSettings>(builder.Configuration.GetSection(CorsSettings.SectionName));
 builder.Services.Configure<AutorizadorSettings>(builder.Configuration.GetSection(AutorizadorSettings.SectionName));
 builder.Services.Configure<WorkerLogsSettings>(builder.Configuration.GetSection(WorkerLogsSettings.SectionName));
+builder.Services.Configure<OnDemandExecutionSettings>(builder.Configuration.GetSection(OnDemandExecutionSettings.SectionName));
 builder.Services.AddSingleton<IDatabaseConnectionProvider, DatabaseConnectionProvider>();
 builder.Services.AddSingleton<EjecucionLogFileService>();
+builder.Services.AddSingleton<OnDemandExecutionService>();
 builder.Services.AddSingleton<ICredencialClaveProtector>(sp =>
 {
     var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CredencialesSettings>>().Value;
