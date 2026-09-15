@@ -38,15 +38,16 @@ Salida: `publish\configurador\api` y `publish\configurador\web`.
 ## 3. Desplegar la API
 
 1. Copie `publish\configurador\api` → carpeta del servidor (ej. `C:\ProgramData\Sigmatec\Salfa\api`)
-2. Verifique **`appsettings.Production.json`** (generado automáticamente con BD + CORS)
+2. Verifique **`appsettings.Production.json`** (generado automáticamente con BD + CORS + Autorizador)
 3. Si el script no encontró cadena local, renombre `appsettings.Production.json.example` → `appsettings.Production.json` y complete la BD
-4. En el servidor:
+4. Confirme **`Autorizador:Enabled: true`** y que `UrlApi` / `Recurso` correspondan al ambiente (QA vs Prod). En QA use `https://apiautorizadorqa.salfagestion.cl/api/v1.0`
+5. En el servidor:
 
 ```cmd
 run-api.bat
 ```
 
-5. Compruebe: `http://SU_SERVIDOR:5154/api/system/status` → `databaseReachable: true`
+6. Compruebe (con Bearer válido): `http://SU_SERVIDOR:5154/api/system/status` → `databaseReachable: true`. Sin token debe responder **401**.
 
 Opcional: `install-api-task.bat` (como administrador) para arrancar la API al iniciar Windows.
 
@@ -62,10 +63,17 @@ Opcional: `install-api-task.bat` (como administrador) para arrancar la API al in
 
 | URL | Esperado |
 |-----|----------|
-| `http://SERVIDOR:5154/swagger` | Swagger API |
-| `http://SERVIDOR:5154/api/system/status` | BD OK |
-| `http://SERVIDOR:8080` | Configurador Angular |
+| `http://SERVIDOR:5154/swagger` | **404** (Swagger solo en Development) |
+| `http://SERVIDOR:5154/api/system/status` sin Bearer | **401** |
+| `http://SERVIDOR:5154/api/system/status` con Bearer válido | BD OK |
+| `http://SERVIDOR:8080` | Configurador Angular (envía Bearer) |
 | `http://SERVIDOR:8080/config.json` | `apiBaseUrl` apuntando a `:5154` |
+
+## 5.1 Seguridad (obligatorio)
+
+- `Autorizador:Enabled` debe ser `true` en todo servidor expuesto.
+- Swagger **no** se publica fuera de Development.
+- El front debe adjuntar `Authorization: Bearer {token}` del Autorizador Salfa.
 
 ## 6. Sin IIS (solo prueba rápida)
 

@@ -11,8 +11,14 @@
   "Cors": {
     "AllowedOrigins": [
       "http://155.254.24.155:8080",
-      "http://localhost:8080"
+      "http://localhost:8080",
+      "https://configsigmabotqa.salfagestion.cl"
     ]
+  },
+  "Autorizador": {
+    "Enabled": true,
+    "UrlApi": "https://apiautorizadorqa.salfagestion.cl/api/v1.0",
+    "Recurso": "configsigmabot-api"
   },
   "OnDemandExecution": {
     "Enabled": false,

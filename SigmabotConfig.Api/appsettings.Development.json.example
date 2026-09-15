@@ -8,6 +8,11 @@
   "Cors": {
     "AllowedOrigins": [ "http://localhost:4200" ]
   },
+  "Autorizador": {
+    "Enabled": false,
+    "UrlApi": "https://apiautorizadorqa.salfagestion.cl/api/v1.0",
+    "Recurso": "configsigmabot-api"
+  },
   "WorkerLogs": {
     "AllowedDirectories": [
       "C:\\path\\to\\SigmabotSync.Worker\\SigmabotSync.Console\\bin\\Debug\\net8.0\\Logs"

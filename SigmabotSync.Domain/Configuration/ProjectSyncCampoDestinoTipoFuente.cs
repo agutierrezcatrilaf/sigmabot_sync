@@ -9,10 +9,10 @@ namespace SigmabotSync.Domain.Configuration
         /// <summary>Ida Codelco→SALFA: DocumentTypeId desde TipoDeDocumento (Plano/Documento Externo).</summary>
         public const string ReglaDocumentTypeFromTipo = "ReglaDocumentTypeFromTipo";
 
-        /// <summary>Vuelta: statusid desde parámetro IdEstatusDocumentoDestino.</summary>
+        /// <summary>Legacy: statusid desde parámetro IdEstatusDocumentoDestino. Preferir Adjunto/Status + allowlist.</summary>
         public const string ParametroIdEstatusDestino = "ParametroIdEstatusDestino";
 
-        /// <summary>Valor del adjunto transmittal (<c>FuenteValor</c>: Revision, MailNo, …).</summary>
+        /// <summary>Valor del adjunto transmittal (<c>FuenteValor</c>: Revision, MailNo, Status, …).</summary>
         public const string Adjunto = "Adjunto";
 
         /// <summary>Solo <c>ValorDefault</c> en create; en supersede se preserva del destino.</summary>

@@ -154,6 +154,11 @@ if ($resolvedCs) {
         Cors = @{
             AllowedOrigins = @($webUrl, "http://localhost:${WebPort}")
         }
+        Autorizador = @{
+            Enabled = $true
+            UrlApi = "https://autorizadorapi.salfagestion.cl/api/v1.0"
+            Recurso = "configsigmabot-api"
+        }
         OnDemandExecution = @{
             Enabled = $false
             WorkerExePath = "C:\ProgramData\Sigmatec\Salfa\worker\SigmabotSync.Console.exe"

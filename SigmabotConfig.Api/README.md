@@ -48,4 +48,26 @@ Por defecto permite `http://localhost:4200` (Angular). Ajuste `Cors:AllowedOrigi
 
 ## Autorizador corporativo
 
-Pendiente: integrar `AuthFilter` del kit Autorizador V2 cuando Salfa entregue `clientId`, URLs y callback.
+La API exige `Authorization: Bearer {token}` y valida el recurso con el Autorizador Salfa (`/user/validarRecursoToken/{Recurso}`).
+
+| Entorno | `Autorizador:Enabled` | Swagger |
+|---------|----------------------|---------|
+| Development (local) | `false` en `appsettings.Development.json` | Disponible |
+| QA / Production | `true` (obligatorio) | **No** publicado |
+
+Configuración relevante:
+
+```json
+{
+  "Autorizador": {
+    "Enabled": true,
+    "UrlApi": "https://apiautorizadorqa.salfagestion.cl/api/v1.0",
+    "Recurso": "configsigmabot-api"
+  }
+}
+```
+
+- En **QA** use `UrlApi` del Autorizador QA; en **Prod** el de producción.
+- El front Angular debe enviar el Bearer del SSO/Autorizador en todas las llamadas.
+- Sin token válido → `401 Unauthorized`.
+- No desactive `Enabled` en servidores expuestos.

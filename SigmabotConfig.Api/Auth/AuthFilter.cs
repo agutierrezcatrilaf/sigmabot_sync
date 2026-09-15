@@ -27,9 +27,16 @@ public sealed class AuthFilter : IAsyncAuthorizationFilter
             return;
         }
 
+        // Swagger solo se publica en Development; health queda anónimo para monitoreo.
         var path = context.HttpContext.Request.Path;
         if (path.StartsWithSegments("/swagger") || path.StartsWithSegments("/health"))
         {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.UrlApi) || string.IsNullOrWhiteSpace(_settings.Recurso))
+        {
+            context.Result = Unauthorized("Autorizador no configurado correctamente.");
             return;
         }
 

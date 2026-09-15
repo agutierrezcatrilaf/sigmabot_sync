@@ -6,7 +6,8 @@ namespace SigmabotSync.Domain.Configuration
     public static class ProjectSyncCampoOrigenTokens
     {
         /// <summary>
-        /// Toma el valor de <see cref="TrabajosConfiguracionKeyNames.IdEstatusDocumentoDestino"/> (parámetros del trabajo).
+        /// Allowlist / legacy: valor de <see cref="TrabajosConfiguracionKeyNames.IdEstatusDocumentoDestino"/>.
+        /// Preferir mapeo Adjunto/Status; el parámetro filtra en vuelta.
         /// </summary>
         public const string IdEstatusDocumentoDestino = "@IdEstatusDocumentoDestino";
 
