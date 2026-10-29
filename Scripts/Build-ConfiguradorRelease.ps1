@@ -16,7 +16,9 @@ param(
     [string] $RepoRoot = "",
     [string] $AngularRoot = "",
     [switch] $SkipZip,
-    [switch] $UseUrlRewrite
+    # Por defecto publica web.config CON rewrite (necesario para /callback del Autorizador).
+    # Use -SkipUrlRewrite solo si el IIS destino no tiene el módulo URL Rewrite.
+    [switch] $SkipUrlRewrite
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,14 +119,14 @@ if (-not (Test-Path $distBrowser)) {
 if (Test-Path $webOut) { Remove-Item $webOut -Recurse -Force }
 Copy-Item $distBrowser $webOut -Recurse
 
-# web.config para IIS (sin URL Rewrite por defecto; ver -UseUrlRewrite)
+# web.config para IIS: con URL Rewrite por defecto (SPA / Autorizador callback)
 $dep = Join-Path $RepoRoot "deployment\configurador"
-if ($UseUrlRewrite) {
-    Copy-Item (Join-Path $dep "web.config") (Join-Path $webOut "web.config") -Force
-    Copy-Item (Join-Path $dep "web.config.sin-rewrite") (Join-Path $webOut "web.config.sin-rewrite") -Force
-} else {
+if ($SkipUrlRewrite) {
     Copy-Item (Join-Path $dep "web.config.sin-rewrite") (Join-Path $webOut "web.config") -Force
     Copy-Item (Join-Path $dep "web.config") (Join-Path $webOut "web.config.con-rewrite") -Force
+} else {
+    Copy-Item (Join-Path $dep "web.config") (Join-Path $webOut "web.config") -Force
+    Copy-Item (Join-Path $dep "web.config.sin-rewrite") (Join-Path $webOut "web.config.sin-rewrite") -Force
 }
 
 # config.json: única fuente de URL del backend (editar en servidor si hace falta)

@@ -22,7 +22,7 @@ El script genera:
 
 - `web/config.json` → URL de la API (`http://SERVIDOR:5154`)
 - `api/appsettings.Production.json` → ConnectionString (desde su config local) + CORS
-- `web/web.config` → versión sin URL Rewrite (use `-UseUrlRewrite` si IIS tiene el módulo)
+- `web/web.config` → con URL Rewrite (SPA / callback Autorizador). Use `-SkipUrlRewrite` solo si IIS no tiene el módulo
 
 Salida: `publish\configurador\api` y `publish\configurador\web`.
 
