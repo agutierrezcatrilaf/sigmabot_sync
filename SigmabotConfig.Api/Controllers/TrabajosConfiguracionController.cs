@@ -60,6 +60,8 @@ public sealed class TrabajosConfiguracionController : ApiControllerBase
                         valor = FileUploadWithMetadataDefaults.TablaMetadata;
                     else if (string.Equals(def.Clave, TrabajosConfiguracionKeyNames.TablaPaths, StringComparison.OrdinalIgnoreCase))
                         valor = FileUploadWithMetadataDefaults.TablaPaths;
+                    else if (string.Equals(def.Clave, TrabajosConfiguracionKeyNames.TablaHomologacion, StringComparison.OrdinalIgnoreCase))
+                        valor = FileUploadWithMetadataDefaults.TablaHomologacion;
                 }
                 valores.Add(new ParametroValorDto { Clave = def.Clave, Valor = valor });
             }
